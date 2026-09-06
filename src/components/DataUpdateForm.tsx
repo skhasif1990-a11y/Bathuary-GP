@@ -1,0 +1,1121 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  FileEdit, 
+  Save, 
+  Printer, 
+  FileCheck,
+  CheckCircle2, 
+  AlertCircle, 
+  CreditCard, 
+  User, 
+  IdCard, 
+  HelpCircle,
+  Search,
+  X,
+  ChevronDown,
+  Zap
+} from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { BeneficiaryRow, BankMasterItem, AppUser } from '../types';
+import { VILLAGES_LIST, OFFICERS_LIST } from '../data/bankMaster';
+import { formatKycDate } from '../utils/dateFormatter';
+
+interface DataUpdateFormProps {
+  beneficiaries: BeneficiaryRow[];
+  bankMaster: BankMasterItem[];
+  currentUser?: AppUser | null;
+  onSaveRecord: (data: Partial<BeneficiaryRow>) => Promise<{ success: boolean; googleSheetSynced?: boolean; googleSheetMessage?: string } | boolean>;
+  onPrintSlip: (row: BeneficiaryRow) => void;
+  onPrintA5Slip: (row: BeneficiaryRow) => void;
+  onOpenSyncModal?: (mode?: 'sheetLink' | 'paste' | 'upload' | 'gas') => void;
+  language?: 'bn' | 'en';
+}
+
+export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
+  beneficiaries,
+  bankMaster,
+  currentUser,
+  onSaveRecord,
+  onPrintSlip,
+  onPrintA5Slip,
+  onOpenSyncModal
+}) => {
+  // Selection states
+  const [selectedAadhaar, setSelectedAadhaar] = useState<string>('');
+  const [selectedJobCard, setSelectedJobCard] = useState<string>('');
+  const [selectedApplicant, setSelectedApplicant] = useState<string>('');
+
+  // Search Combobox states for Aadhaar and Job Card
+  const [jobCardSearch, setJobCardSearch] = useState<string>('');
+  const [isJobCardOpen, setIsJobCardOpen] = useState<boolean>(false);
+  const [aadhaarSearch, setAadhaarSearch] = useState<string>('');
+  const [isAadhaarOpen, setIsAadhaarOpen] = useState<boolean>(false);
+
+  const jobCardDropdownRef = useRef<HTMLDivElement>(null);
+  const aadhaarDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close search dropdowns when clicking outside
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      if (jobCardDropdownRef.current && !jobCardDropdownRef.current.contains(e.target as Node)) {
+        setIsJobCardOpen(false);
+      }
+      if (aadhaarDropdownRef.current && !aadhaarDropdownRef.current.contains(e.target as Node)) {
+        setIsAadhaarOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => document.removeEventListener('mousedown', handleDocumentClick);
+  }, []);
+
+  // Active loaded record state
+  const [activeRow, setActiveRow] = useState<BeneficiaryRow | null>(null);
+
+  // Form Fields State
+  const [formData, setFormData] = useState({
+    colP: '', // Aadhaar
+    colQ: '', // Phone
+    colR: '', // eKYC (Yes/No)
+    colS: '', // Date
+    colT: '', // Error / Death
+    colU: '', // Processed by
+    colV: '', // Village
+    colW: '', // Submitted to office
+    colX: '', // Remarks
+    colAO: '', // Bank Name
+    colAP: '', // IFSC
+    colAQ: '', // Branch
+    colAR: '', // Account
+    colAR_confirm: '' // Confirm Account
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Filtered Job Cards & Applicants
+  const uniqueJobCards = Array.from(new Set(beneficiaries.map(b => b.colH).filter(Boolean))).sort();
+  const availableApplicants = selectedJobCard 
+    ? Array.from(new Set(beneficiaries.filter(b => b.colH === selectedJobCard).map(b => b.colJ).filter(Boolean)))
+    : [];
+
+  // Live filtered suggestions for Job Card Number Search
+  const filteredJobCards = useMemo(() => {
+    const q = jobCardSearch.trim().toLowerCase();
+    if (!q) return [];
+    return beneficiaries
+      .filter(b => 
+        (b.colH && String(b.colH).toLowerCase().includes(q)) || 
+        (b.colJ && String(b.colJ).toLowerCase().includes(q)) || 
+        (b.colB && String(b.colB).toLowerCase().includes(q))
+      )
+      .slice(0, 25);
+  }, [beneficiaries, jobCardSearch]);
+
+  // Live filtered suggestions for Aadhaar Number Search
+  const filteredAadhaarRecords = useMemo(() => {
+    const q = aadhaarSearch.trim().replace(/\D/g, '');
+    if (!q) return [];
+    return beneficiaries
+      .filter(b => b.colP && b.colP.replace(/\D/g, '').includes(q))
+      .slice(0, 25);
+  }, [beneficiaries, aadhaarSearch]);
+
+  // Standard RBI 4-letter IFSC Bank Map for instant auto-resolution
+  const RBI_BANK_PREFIX_MAP: Record<string, string> = {
+    BKID: 'BANK OF INDIA',
+    SBIN: 'STATE BANK OF INDIA',
+    PUNB: 'PUNJAB NATIONAL BANK',
+    UBIN: 'UNION BANK OF INDIA',
+    IDIB: 'INDIAN BANK',
+    CNRB: 'CANARA BANK',
+    BARB: 'BANK OF BARODA',
+    UCBA: 'UCO BANK',
+    CBIN: 'CENTRAL BANK OF INDIA',
+    UTIB: 'AXIS BANK',
+    HDFC: 'HDFC BANK',
+    ICIC: 'ICICI BANK',
+    IOBA: 'INDIAN OVERSEAS BANK',
+    BDBL: 'BANDHAN BANK',
+    KKBK: 'KOTAK MAHINDRA BANK',
+    WBSC: 'WEST BENGAL STATE COOP BANK',
+    AIRP: 'AIRTEL PAYMENTS BANK',
+    IPOS: 'INDIA POST PAYMENTS BANK'
+  };
+
+  // Bank master lists (always includes currently active bank)
+  const uniqueBanks = Array.from(
+    new Set([...bankMaster.map(b => b.bank), formData.colAO].filter(Boolean))
+  ).sort();
+
+  const availableIfscs = bankMaster
+    .filter(b => !formData.colAO || (b.bank && b.bank.toUpperCase() === String(formData.colAO).toUpperCase()))
+    .map(b => b.ifsc);
+
+  // Sync selected record when Applicant changes
+  useEffect(() => {
+    if (selectedJobCard && selectedApplicant) {
+      const match = beneficiaries.find(b => b.colH === selectedJobCard && b.colJ === selectedApplicant);
+      if (match) {
+        setActiveRow(match);
+
+        // Normalize Bank details (fix branch vs IFSC if inverted)
+        let resolvedIfsc = (match.colAP || '').trim().toUpperCase();
+        let resolvedBranch = (match.colAQ || '').trim().toUpperCase();
+        let resolvedBank = (match.colAO || '').trim().toUpperCase();
+
+        const isBranchAnIfsc = /^[A-Z]{4}0[A-Z0-9]{6}$/.test(resolvedBranch) || bankMaster.some(b => b.ifsc.toUpperCase() === resolvedBranch);
+        const isIfscABranch = resolvedIfsc.includes('BRANCH') || resolvedIfsc.includes('MAIN') || resolvedIfsc.includes('BAZAR') || resolvedIfsc.includes('RURAL') || resolvedIfsc.includes('MIDNAPORE');
+
+        if (isBranchAnIfsc || isIfscABranch) {
+          const temp = resolvedIfsc;
+          resolvedIfsc = resolvedBranch;
+          resolvedBranch = temp;
+        }
+
+        // Auto-fill from bankMaster if IFSC is recognized
+        const matchedBank = bankMaster.find(b => b.ifsc.toUpperCase() === resolvedIfsc);
+        if (matchedBank) {
+          if (!resolvedBank || resolvedBank === '—') resolvedBank = matchedBank.bank;
+          if (!resolvedBranch || resolvedBranch === '—') resolvedBranch = matchedBank.branch;
+        }
+
+        const formattedKyc = formatKycDate(match.colS);
+
+        setFormData({
+          colP: match.colP || '',
+          colQ: match.colQ || '',
+          colR: match.colR || '',
+          colS: formattedKyc || (match.colR === 'Yes' || match.colR === 'Y' ? new Date().toLocaleDateString('en-GB') : ''),
+          colT: match.colT || '',
+          colU: match.colU || (currentUser ? `${currentUser.name}, ${currentUser.role}` : ''),
+          colV: match.colV || '',
+          colW: match.colW || '',
+          colX: match.colX || '',
+          colAO: resolvedBank,
+          colAP: resolvedIfsc,
+          colAQ: resolvedBranch,
+          colAR: match.colAR || '',
+          colAR_confirm: match.colAR || ''
+        });
+        setSelectedAadhaar(match.colP || '');
+        setAadhaarSearch(match.colP || '');
+        setJobCardSearch(match.colH || '');
+      }
+    } else {
+      setActiveRow(null);
+    }
+  }, [selectedJobCard, selectedApplicant, beneficiaries, currentUser, bankMaster]);
+
+  // Selection handlers
+  const handleSelectJobCardMatch = (cardNo: string, applicantName?: string) => {
+    setSelectedJobCard(cardNo);
+    setJobCardSearch(cardNo);
+    setIsJobCardOpen(false);
+    const applicants = Array.from(new Set(beneficiaries.filter(b => b.colH === cardNo).map(b => b.colJ).filter(Boolean)));
+    if (applicantName) {
+      setSelectedApplicant(applicantName);
+    } else if (applicants.length === 1) {
+      setSelectedApplicant(applicants[0]);
+    } else {
+      setSelectedApplicant('');
+    }
+  };
+
+  const handleSelectAadhaarMatch = (b: BeneficiaryRow) => {
+    setSelectedAadhaar(b.colP);
+    setAadhaarSearch(b.colP);
+    setIsAadhaarOpen(false);
+    setSelectedJobCard(b.colH);
+    setJobCardSearch(b.colH);
+    setSelectedApplicant(b.colJ);
+  };
+
+  const handleAadhaarInputChange = (val: string) => {
+    setAadhaarSearch(val);
+    setIsAadhaarOpen(true);
+    const clean = val.replace(/\D/g, '');
+    setSelectedAadhaar(clean);
+    if (clean.length === 12) {
+      const match = beneficiaries.find(b => b.colP === clean);
+      if (match) {
+        setSelectedJobCard(match.colH);
+        setJobCardSearch(match.colH);
+        setSelectedApplicant(match.colJ);
+        setIsAadhaarOpen(false);
+      }
+    }
+  };
+
+  const handleJobCardInputChange = (val: string) => {
+    setJobCardSearch(val);
+    setIsJobCardOpen(true);
+    const exact = beneficiaries.find(b => b.colH && b.colH.toUpperCase() === val.trim().toUpperCase());
+    if (exact) {
+      setSelectedJobCard(exact.colH);
+      const applicants = Array.from(new Set(beneficiaries.filter(b => b.colH === exact.colH).map(b => b.colJ).filter(Boolean)));
+      if (applicants.length === 1) {
+        setSelectedApplicant(applicants[0]);
+      }
+    }
+  };
+
+  // IFSC Change -> Auto Fill Bank & Branch (Master + RBI 4-letter prefix + Razorpay API)
+  const handleIfscChange = (ifsc: string) => {
+    const clean = ifsc.trim().toUpperCase();
+    
+    // 1. Check local bankMaster
+    const item = bankMaster.find(b => b.ifsc.toUpperCase() === clean);
+    if (item) {
+      setFormData(prev => ({
+        ...prev,
+        colAP: item.ifsc,
+        colAO: item.bank,
+        colAQ: item.branch
+      }));
+      return;
+    }
+
+    // 2. Immediate RBI 4-letter Bank Prefix resolution (e.g. BKID -> BANK OF INDIA)
+    const prefix = clean.slice(0, 4);
+    const resolvedBank = RBI_BANK_PREFIX_MAP[prefix] || '';
+
+    setFormData(prev => ({
+      ...prev,
+      colAP: clean,
+      colAO: resolvedBank || prev.colAO
+    }));
+
+    // 3. Live open IFSC lookup when 11 characters are entered
+    if (clean.length === 11) {
+      fetch(`https://ifsc.razorpay.com/${clean}`)
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => {
+          if (data && data.BANK) {
+            setFormData(prev => ({
+              ...prev,
+              colAP: clean,
+              colAO: data.BANK ? String(data.BANK).toUpperCase() : (resolvedBank || prev.colAO),
+              colAQ: data.BRANCH ? String(data.BRANCH).toUpperCase() : prev.colAQ
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  };
+
+  // Bank Change -> Auto select IFSC & Branch if available
+  const handleBankChange = (bank: string) => {
+    const matches = bankMaster.filter(b => b.bank.toUpperCase() === bank.toUpperCase());
+    setFormData(prev => ({
+      ...prev,
+      colAO: bank,
+      colAP: matches.length > 0 ? matches[0].ifsc : prev.colAP,
+      colAQ: matches.length > 0 ? matches[0].branch : prev.colAQ
+    }));
+  };
+
+  // e-KYC Toggle -> auto date
+  const handleEkycChange = (val: string) => {
+    const today = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+    setFormData(prev => ({
+      ...prev,
+      colR: val,
+      colS: val === 'Yes' ? (formatKycDate(prev.colS) || today) : ''
+    }));
+  };
+
+  // Validations
+  const isAadhaarValid = formData.colP ? /^\d{12}$/.test(formData.colP) : true;
+  const isPhoneValid = formData.colQ ? /^\d{10}$/.test(formData.colQ) : true;
+  const isAccountMatching = formData.colAR && formData.colAR_confirm 
+    ? formData.colAR === formData.colAR_confirm 
+    : true;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaveStatus(null);
+
+    if (!isAadhaarValid) {
+      setSaveStatus({
+        type: 'error',
+        message: "Please enter a valid 12-digit Aadhaar number."
+      });
+      return;
+    }
+    if (!isPhoneValid) {
+      setSaveStatus({
+        type: 'error',
+        message: "Please enter a valid 10-digit mobile phone number."
+      });
+      return;
+    }
+    if (formData.colAR && !isAccountMatching) {
+      setSaveStatus({
+        type: 'error',
+        message: "Account number and confirm account number do not match."
+      });
+      return;
+    }
+
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setShowConfirmModal(false);
+    if (!activeRow) return;
+
+    setIsSaving(true);
+    const saveRes = await onSaveRecord({
+      rowIndex: activeRow.rowIndex,
+      ...formData
+    });
+    setIsSaving(false);
+
+    const isSuccess = typeof saveRes === 'boolean' ? saveRes : saveRes?.success;
+    const isGoogleSheetSynced = typeof saveRes === 'object' ? saveRes?.googleSheetSynced : false;
+    const gasMessage = typeof saveRes === 'object' ? saveRes?.googleSheetMessage : '';
+
+    if (isSuccess) {
+      try {
+        if (typeof confetti === 'function') {
+          confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        }
+      } catch (err) {
+        console.warn('Confetti effect skipped:', err);
+      }
+
+      if (isGoogleSheetSynced) {
+        setSaveStatus({
+          type: 'success',
+          message: `✓ Saved locally & Live Auto-Synced to Google Sheet! (${gasMessage || 'Row updated'})`
+        });
+      } else if (gasMessage) {
+        setSaveStatus({
+          type: 'info',
+          message: `✓ Record updated locally. Google Sheet sync: ${gasMessage}`
+        });
+      } else {
+        setSaveStatus({
+          type: 'success',
+          message: "Data saved and verified successfully!"
+        });
+      }
+    } else {
+      setSaveStatus({
+        type: 'error',
+        message: "Failed to save record. Please check permissions."
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Search & Select Controls */}
+      <div className="rounded-3xl bg-white border border-slate-200 p-6 sm:p-8 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <FileEdit className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                Job Card Data Update & Verification
+              </h3>
+              <p className="text-xs text-slate-500">
+                Select Aadhaar or Job Card to view and modify beneficiary details.
+              </p>
+            </div>
+          </div>
+
+          {/* 2-Way Live Auto-Sync Status / Quick Open */}
+          {onOpenSyncModal && (
+            <button
+              type="button"
+              onClick={() => onOpenSyncModal('gas')}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold transition-all cursor-pointer self-start sm:self-auto shadow-xs"
+              title="Click to check or configure Google Sheet 2-Way Live Auto-Sync"
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+              <span>Google Sheet Live Sync</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Aadhaar Fast Search & Combobox */}
+          <div ref={aadhaarDropdownRef} className="relative">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <IdCard className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Aadhaar Number (Col P):</span>
+              </label>
+              {aadhaarSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAadhaarSearch('');
+                    setSelectedAadhaar('');
+                    setIsAadhaarOpen(false);
+                  }}
+                  className="text-[11px] text-slate-400 hover:text-rose-600 font-semibold flex items-center gap-0.5 cursor-pointer"
+                >
+                  <X className="w-3 h-3" /> Clear
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search by 4 or 12 digit Aadhaar..."
+                value={aadhaarSearch}
+                onFocus={() => setIsAadhaarOpen(true)}
+                onChange={(e) => handleAadhaarInputChange(e.target.value)}
+                className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl pl-9 pr-8 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all shadow-xs"
+              />
+              <button
+                type="button"
+                onClick={() => setIsAadhaarOpen(!isAadhaarOpen)}
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${isAadhaarOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+
+            {/* Aadhaar Live Search Dropdown */}
+            {isAadhaarOpen && (
+              <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl border-2 border-emerald-500 shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+                {filteredAadhaarRecords.length > 0 ? (
+                  <>
+                    <div className="px-3 py-1.5 bg-emerald-50 text-[11px] font-bold text-emerald-800 flex justify-between items-center">
+                      <span>Found {filteredAadhaarRecords.length} match(es)</span>
+                      <span>Click to select</span>
+                    </div>
+                    {filteredAadhaarRecords.map((item, idx) => (
+                      <button
+                        key={`${item.colH}-${item.colJ}-${idx}`}
+                        type="button"
+                        onClick={() => handleSelectAadhaarMatch(item)}
+                        className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/70 transition-colors flex items-center justify-between group cursor-pointer"
+                      >
+                        <div>
+                          <div className="font-mono font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+                            <span className="text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded text-[11px]">
+                              {item.colP}
+                            </span>
+                            <span className="font-sans font-bold text-slate-800">{item.colJ}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 flex gap-2">
+                            <span>JC: {item.colH}</span>
+                            <span>• {item.colV}</span>
+                            <span>• {item.colB}</span>
+                          </div>
+                        </div>
+                        <span className="text-xs font-bold text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                          Select →
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <div className="px-4 py-3 text-xs text-slate-500 text-center">
+                    {aadhaarSearch.trim() ? "No matching Aadhaar found. Type digits to search." : "Type digits to search Aadhaar numbers"}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Job Card Fast Search & Combobox */}
+          <div ref={jobCardDropdownRef} className="relative">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Job Card Number (Col H):</span>
+              </label>
+              {jobCardSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJobCardSearch('');
+                    setSelectedJobCard('');
+                    setSelectedApplicant('');
+                    setIsJobCardOpen(false);
+                  }}
+                  className="text-[11px] text-slate-400 hover:text-rose-600 font-semibold flex items-center gap-0.5 cursor-pointer"
+                >
+                  <X className="w-3 h-3" /> Clear
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search Job Card or Name..."
+                value={jobCardSearch}
+                onFocus={() => setIsJobCardOpen(true)}
+                onChange={(e) => handleJobCardInputChange(e.target.value)}
+                className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl pl-9 pr-8 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all shadow-xs"
+              />
+              <button
+                type="button"
+                onClick={() => setIsJobCardOpen(!isJobCardOpen)}
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${isJobCardOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+
+            {/* Job Card Live Search Dropdown */}
+            {isJobCardOpen && (
+              <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl border-2 border-emerald-500 shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+                {filteredJobCards.length > 0 ? (
+                  <>
+                    <div className="px-3 py-1.5 bg-emerald-50 text-[11px] font-bold text-emerald-800 flex justify-between items-center">
+                      <span>Found {filteredJobCards.length} match(es)</span>
+                      <span>Click to select</span>
+                    </div>
+                    {filteredJobCards.map((b, idx) => (
+                      <button
+                        key={`${b.colH}-${b.colJ}-${idx}`}
+                        type="button"
+                        onClick={() => handleSelectJobCardMatch(b.colH, b.colJ)}
+                        className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/70 transition-colors flex items-center justify-between group cursor-pointer"
+                      >
+                        <div>
+                          <div className="font-mono font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+                            <span className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[11px]">
+                              {b.colH}
+                            </span>
+                            <span className="font-sans font-bold text-slate-800">{b.colJ}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 flex gap-2">
+                            <span>Aadhaar: {b.colP ? `•••• ${b.colP.slice(-4)}` : 'Not linked'}</span>
+                            <span>• {b.colV}</span>
+                            <span>• {b.colB}</span>
+                          </div>
+                        </div>
+                        <span className="text-xs font-bold text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                          Select →
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <div className="px-4 py-3 text-xs text-slate-500 text-center">
+                    {jobCardSearch.trim() ? "No matching Job Card found." : "Type to search by Job Card, Name, or Sansad"}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Applicant Select */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Applicant Name (Col J):</span>
+              </label>
+              {selectedApplicant && (
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Active
+                </span>
+              )}
+            </div>
+            <select
+              value={selectedApplicant}
+              disabled={!selectedJobCard}
+              onChange={(e) => setSelectedApplicant(e.target.value)}
+              className={`w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all cursor-pointer shadow-xs ${
+                !selectedJobCard ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              <option value="">
+                {selectedJobCard ? "-- Select Applicant from Card --" : "-- First Search Job Card or Aadhaar --"}
+              </option>
+              {availableApplicants.map(app => (
+                <option key={app} value={app}>{app}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {saveStatus && (
+          <div className={`mt-4 p-3 rounded-xl flex items-center gap-2 text-xs font-bold ${
+            saveStatus.type === 'success' 
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+              : saveStatus.type === 'info'
+              ? 'bg-sky-50 text-sky-700 border border-sky-200'
+              : 'bg-rose-50 text-rose-700 border border-rose-200'
+          }`}>
+            {saveStatus.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0" />
+            )}
+            <span>{saveStatus.message}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Main Data Form */}
+      {activeRow ? (
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Section 1: Read Only Information (Col A - Col O, AF, AG) */}
+          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                <h4 className="text-sm sm:text-base font-extrabold text-slate-800">
+                  Official Master Records (Col A - O, AF, AG) [Read Only]
+                </h4>
+              </div>
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                Row #{activeRow.rowIndex}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <ReadOnlyField label="Sheet Sl No (A)" value={activeRow.colA} />
+              <ReadOnlyField label="Sansad Name (B)" value={activeRow.colB} highlight />
+              <ReadOnlyField label="District (D)" value={activeRow.colD} />
+              <ReadOnlyField label="Block (E)" value={activeRow.colE} />
+              <ReadOnlyField label="Gram Panchayat (F)" value={activeRow.colF} />
+              <ReadOnlyField label="Job Card Number (H)" value={activeRow.colH} highlight />
+              <ReadOnlyField label="Applicant No (I)" value={activeRow.colI} />
+              <ReadOnlyField label="Applicant Name (J)" value={activeRow.colJ} highlight />
+              <ReadOnlyField label="Gender (K)" value={activeRow.colK} />
+              <ReadOnlyField label="Name as per ID (L)" value={activeRow.colL} />
+              <ReadOnlyField label="Head of Household (AG)" value={activeRow.colAG} />
+              <ReadOnlyField label="Father/Husband Name of HH (AF)" value={activeRow.colAF} />
+              <ReadOnlyField label="Aadhaar Seeded in NREGASoft (M)" value={activeRow.colM} />
+              <ReadOnlyField label="Demographic Auth Done (N)" value={activeRow.colN} />
+              <ReadOnlyField label="Enables for ABPS? (O)" value={activeRow.colO} highlight />
+            </div>
+          </div>
+
+          {/* Section 2: Editable e-KYC Data (Col P - Col X) */}
+          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+              <h4 className="text-sm sm:text-base font-extrabold text-slate-800">
+                Data Entry & e-KYC Update (Col P - Col X)
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Col P: Aadhaar */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Aadhaar / ID Number (Col P):</span>
+                  <span className={`text-[10px] ${formData.colP.length === 12 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                    {formData.colP.length}/12
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={12}
+                  placeholder="12 Digit Aadhaar Number"
+                  value={formData.colP}
+                  onChange={(e) => setFormData({ ...formData, colP: e.target.value.replace(/\D/g, '') })}
+                  className={`w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border focus:outline-none transition-all ${
+                    formData.colP && !isAadhaarValid 
+                      ? 'border-rose-400 bg-rose-50 text-rose-900' 
+                      : formData.colP.length === 12 
+                        ? 'border-emerald-500 bg-emerald-50/50' 
+                        : 'border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200'
+                  }`}
+                />
+              </div>
+
+              {/* Col Q: Phone */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Worker Phone Number (Col Q):</span>
+                  <span className={`text-[10px] ${formData.colQ.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                    {formData.colQ.length}/10
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  placeholder="10 Digit Mobile Number"
+                  value={formData.colQ}
+                  onChange={(e) => setFormData({ ...formData, colQ: e.target.value.replace(/\D/g, '') })}
+                  className={`w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border focus:outline-none transition-all ${
+                    formData.colQ && !isPhoneValid 
+                      ? 'border-rose-400 bg-rose-50 text-rose-900' 
+                      : formData.colQ.length === 10 
+                        ? 'border-emerald-500 bg-emerald-50/50' 
+                        : 'border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200'
+                  }`}
+                />
+              </div>
+
+              {/* Col R: e-KYC Done */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
+                  e-KYC Successfully Done (Col R):
+                </label>
+                <select
+                  value={formData.colR}
+                  onChange={(e) => handleEkycChange(e.target.value)}
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="">-- Select --</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              {/* Col S: Date of e-KYC Done */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Date of e-KYC Done (Col S):</span>
+                  {formData.colR === 'Yes' && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, colS: new Date().toLocaleDateString('en-GB') })}
+                      className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                    >
+                      Set Today
+                    </button>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  placeholder="DD/MM/YYYY"
+                  value={formData.colS ? formatKycDate(formData.colS) : ''}
+                  onChange={(e) => setFormData({ ...formData, colS: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all font-mono"
+                />
+              </div>
+
+              {/* Col T: Error shown */}
+              <div className="sm:col-span-2">
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
+                  Error shown during e-KYC / Death (Col T):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Error Message or Death / Expired"
+                  value={formData.colT}
+                  onChange={(e) => setFormData({ ...formData, colT: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* Col U: e-KYC Processed by */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
+                  e-KYC Process done by (Col U):
+                </label>
+                <select
+                  value={formData.colU}
+                  onChange={(e) => setFormData({ ...formData, colU: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="">-- Select Officer --</option>
+                  {OFFICERS_LIST.map(officer => (
+                    <option key={officer} value={officer}>{officer}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Col V: Village Name */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
+                  Village Name (Col V):
+                </label>
+                <select
+                  value={formData.colV}
+                  onChange={(e) => setFormData({ ...formData, colV: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="">-- Select Village --</option>
+                  {VILLAGES_LIST.map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Col W: Job Card Submitted */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
+                  Job Card Submitted to Office? (Col W):
+                </label>
+                <select
+                  value={formData.colW}
+                  onChange={(e) => setFormData({ ...formData, colW: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="">-- Select --</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              {/* Col X: Remark */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
+                  Remarks (Col X):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter remarks..."
+                  value={formData.colX}
+                  onChange={(e) => setFormData({ ...formData, colX: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Bank Details (Col AO - Col AR) with Merger Normalization */}
+          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+              <h4 className="text-sm sm:text-base font-extrabold text-slate-800">
+                Bank Account Details (Col AO - Col AR)
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Col AP: IFSC Code (Auto-fills Bank and Branch) */}
+              <div className="sm:col-span-2">
+                <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>IFSC Code (Col AP) — Select to auto-fill Bank & Branch:</span>
+                  {formData.colAP && bankMaster.some(b => b.ifsc.toUpperCase() === formData.colAP.toUpperCase()) && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      ✓ Master IFSC Matched
+                    </span>
+                  )}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <select
+                    value={formData.colAP}
+                    onChange={(e) => handleIfscChange(e.target.value)}
+                    className="sm:col-span-2 bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer font-mono"
+                  >
+                    <option value="">-- Choose IFSC Code (Auto-fills Bank & Branch) --</option>
+                    {formData.colAP && !bankMaster.some(b => b.ifsc.toUpperCase() === formData.colAP.toUpperCase()) && (
+                      <option value={formData.colAP}>{formData.colAP} — Current Record IFSC</option>
+                    )}
+                    {bankMaster.map(item => (
+                      <option key={item.ifsc} value={item.ifsc}>
+                        {item.ifsc} — {item.bank} ({item.branch})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Or type/paste IFSC..."
+                    value={formData.colAP}
+                    onChange={(e) => handleIfscChange(e.target.value.toUpperCase())}
+                    className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all font-mono uppercase"
+                  />
+                </div>
+              </div>
+
+              {/* Col AO: Bank Name */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Bank Name (Col AO):</span>
+                  {formData.colAO && (
+                    <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      ✓ Auto-synced
+                    </span>
+                  )}
+                </label>
+                <div className="space-y-1.5">
+                  <select
+                    value={formData.colAO}
+                    onChange={(e) => handleBankChange(e.target.value)}
+                    className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer"
+                  >
+                    <option value="">-- Select Bank --</option>
+                    {uniqueBanks.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={formData.colAO}
+                    onChange={(e) => setFormData({ ...formData, colAO: e.target.value.toUpperCase() })}
+                    placeholder="Or type Bank Name..."
+                    className="w-full bg-slate-50 text-slate-800 text-xs font-semibold rounded-xl px-3.5 py-1.5 border border-slate-200 focus:border-emerald-500 focus:outline-none uppercase"
+                  />
+                </div>
+              </div>
+
+              {/* Col AQ: Branch Name */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Branch Name (Col AQ):</span>
+                  {formData.colAQ && (
+                    <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      ✓ Auto-filled
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={formData.colAQ}
+                  onChange={(e) => setFormData({ ...formData, colAQ: e.target.value.toUpperCase() })}
+                  placeholder="Auto-filled on IFSC select"
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:bg-white focus:border-emerald-500 focus:outline-none transition-all uppercase"
+                />
+              </div>
+
+              {/* Col AR: Account Number */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
+                  Account Number (Col AR):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Account Number"
+                  value={formData.colAR}
+                  onChange={(e) => setFormData({ ...formData, colAR: e.target.value.trim() })}
+                  className={`w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border focus:outline-none transition-all ${
+                    formData.colAR && formData.colAR_confirm && !isAccountMatching
+                      ? 'border-rose-400 bg-rose-50'
+                      : formData.colAR && isAccountMatching
+                        ? 'border-emerald-500 bg-emerald-50/40'
+                        : 'border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200'
+                  }`}
+                />
+              </div>
+
+              {/* Col AR Confirm */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Confirm Account Number:</span>
+                  {formData.colAR && formData.colAR_confirm && (
+                    <span className={`text-[10px] font-bold ${isAccountMatching ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {isAccountMatching ? "Matched ✓" : "Mismatch ✕"}
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  placeholder="Confirm Account Number"
+                  value={formData.colAR_confirm}
+                  onChange={(e) => setFormData({ ...formData, colAR_confirm: e.target.value.trim() })}
+                  className={`w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border focus:outline-none transition-all ${
+                    formData.colAR && formData.colAR_confirm && !isAccountMatching
+                      ? 'border-rose-400 bg-rose-50'
+                      : formData.colAR && isAccountMatching
+                        ? 'border-emerald-500 bg-emerald-50/40'
+                        : 'border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200'
+                  }`}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons (3D Tactile & Dynamic) */}
+          <div className="flex flex-wrap items-center gap-3.5 pt-2">
+            <button
+              type="submit"
+              disabled={isSaving}
+              id="saveData3dBtn"
+              className="flex-1 min-w-[170px] py-3.5 px-6 rounded-2xl btn-3d-save text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+              <span>{isSaving ? "Saving Data..." : "Save Data"}</span>
+            </button>
+
+            <button
+              type="button"
+              id="printSlip3dBtn"
+              onClick={() => onPrintSlip({ ...activeRow, ...formData } as BeneficiaryRow)}
+              className="py-3.5 px-6 rounded-2xl btn-3d-slip text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg transition-all"
+              title="Print Citizen Acknowledgement Slip"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Print Slip</span>
+            </button>
+
+            <button
+              type="button"
+              id="jobCardPrint3dBtn"
+              onClick={() => onPrintA5Slip({ ...activeRow, ...formData } as BeneficiaryRow)}
+              className="py-3.5 px-6 rounded-2xl btn-3d-jobcard text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg transition-all"
+              title="Official Job Card & Family e-KYC Print (Enhanced A5 Certificate)"
+            >
+              <FileCheck className="w-4 h-4" />
+              <span>Job Card Print</span>
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="rounded-3xl bg-white border border-dashed border-slate-300 p-12 text-center shadow-sm">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center mb-3">
+            <IdCard className="w-8 h-8" />
+          </div>
+          <h4 className="text-base sm:text-lg font-bold text-slate-800">
+            No Beneficiary Selected
+          </h4>
+          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+            Please select an Aadhaar number or Job Card & Applicant name above to view details.
+          </p>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="rounded-3xl bg-white border border-slate-200 p-6 max-w-sm w-full shadow-2xl text-center animate-in fade-in zoom-in duration-200">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center mb-4">
+              <HelpCircle className="w-8 h-8" />
+            </div>
+            <h4 className="text-lg font-black text-slate-900">
+              Confirm Save?
+            </h4>
+            <p className="text-xs text-slate-600 mt-2">
+              Are you sure you want to update this beneficiary record in Bathuary GP database?
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="flex-1 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSave}
+                className="flex-1 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors shadow-md cursor-pointer"
+              >
+                Yes, Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ReadOnlyField = ({ label, value, highlight = false }: { label: string; value?: string; highlight?: boolean }) => (
+  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+    <span className="block text-[10px] text-slate-500 font-semibold truncate">{label}</span>
+    <span className={`block font-bold truncate mt-0.5 ${highlight ? 'text-emerald-700' : 'text-slate-800'}`}>
+      {value || "—"}
+    </span>
+  </div>
+);

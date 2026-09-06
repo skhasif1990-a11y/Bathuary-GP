@@ -143,7 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-semibold">29 Canonical Villages</span>
             </span>
-            <span className="text-slate-300 font-mono text-[10px]">Egra-II Block</span>
+            <span className="text-slate-300 font-mono text-[10px]">Egra-II Development Block</span>
           </div>
         </div>
 

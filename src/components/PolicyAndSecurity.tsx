@@ -86,7 +86,7 @@ export const PolicyAndSecurity: React.FC<PolicyAndSecurityProps> = () => {
             </div>
             <div>
               <span className="text-[10px] text-slate-500 block font-semibold">Field Office Address:</span>
-              <span className="font-bold text-slate-900">Hatbaincha, Egra-II Block, Purba Medinipur</span>
+              <span className="font-bold text-slate-900">Hatbaincha, Egra-II Development Block, Purba Medinipur</span>
             </div>
           </div>
         </div>

@@ -124,7 +124,7 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
                   BATHUARY GRAM PANCHAYAT
                 </h2>
                 <h3 className="font-bold text-[9px] text-slate-700 uppercase tracking-wide">
-                  Egra-II Block • Purba Medinipur
+                  Egra-II Development Block • Purba Medinipur
                 </h3>
                 <div className="inline-block mt-0.5 px-2.5 py-0.5 bg-slate-950 border border-slate-900 rounded font-black text-[10px] uppercase tracking-wider text-white shadow-xs">
                   Job Card Acknowledgement Slip
@@ -315,7 +315,7 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
           {/* Under Table - Official Certification Note */}
           <div className="p-1.5 bg-slate-50 border border-slate-200 rounded text-[9px] text-slate-600 leading-tight mb-2">
             <strong>Declaration & Note:</strong> This document certifies that the aforementioned Job Card and Family Members
-            are officially registered under Bathuary Gram Panchayat, Egra-II Block. The biometric e-KYC verification and ABPS
+            are officially registered under Bathuary Gram Panchayat, Egra-II Development Block. The biometric e-KYC verification and ABPS
             statuses are verified through official records.
           </div>
 
@@ -337,7 +337,7 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
                 <p className="text-[11px] font-black text-slate-950">
                   Issue Date: <span className="font-mono font-bold text-slate-900">{new Date().toLocaleDateString('en-GB')}</span>
                 </p>
-                <p className="text-[10px] font-bold text-slate-700">Office: Bathuary Gram Panchayat, Egra-II Block</p>
+                <p className="text-[10px] font-bold text-slate-700">Office: Bathuary Gram Panchayat, Egra-II Development Block</p>
                 <p className="text-[9px] text-slate-500 font-mono">Ref: WB/EGR2/BAT/{row.colA || '001'}</p>
               </div>
 
@@ -350,7 +350,7 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
                   Authority Signature
                 </p>
                 <p className="text-[10px] font-bold text-slate-700">
-                  Bathuary Gram Panchayat, Egra-II
+                  Bathuary Gram Panchayat, Egra-II Development Block
                 </p>
               </div>
 

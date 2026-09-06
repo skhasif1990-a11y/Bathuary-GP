@@ -1,7 +1,7 @@
 import { SANSAD_LIST } from '../data/bankMaster';
 
 /**
- * The 16 Official Sansads of Bathuary Gram Panchayat, Egra-II Block, Purba Medinipur
+ * The 16 Official Sansads of Bathuary Gram Panchayat, Egra-II Development Block, Purba Medinipur
  * BATHUARY 1 to BATHUARY 16
  */
 export const CANONICAL_16_SANSADS: readonly string[] = SANSAD_LIST;

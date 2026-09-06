@@ -41,7 +41,7 @@ export const DashboardAnalytics: React.FC<DashboardProps> = ({
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold mb-2 shadow-xs">
               <Building className="w-3.5 h-3.5 text-emerald-700 animate-pulse" />
-              <span>Bathuary Gram Panchayat • Egra-II Block • Purba Medinipur</span>
+              <span>Bathuary Gram Panchayat • Egra-II Development Block • Purba Medinipur</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight flex items-center gap-2.5">
               <span>Job Card & e-KYC Analytics Dashboard</span>

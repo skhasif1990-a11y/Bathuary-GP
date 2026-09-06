@@ -514,7 +514,7 @@ export default function App() {
                   Bathuary Gram Panchayat • VB-GRAM G Act Field Unit
                 </span>
                 <span className="text-slate-300 mx-2 hidden sm:inline">•</span>
-                <span className="text-slate-500 hidden sm:inline">Hatbaincha, Egra-II Block, Purba Medinipur</span>
+                <span className="text-slate-500 hidden sm:inline">Hatbaincha, Egra-II Development Block, Purba Medinipur</span>
               </div>
             </div>
 

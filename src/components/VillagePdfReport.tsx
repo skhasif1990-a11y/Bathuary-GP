@@ -147,7 +147,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                 Panchayats & Rural Development
               </div>
               <h2 className="text-base font-black text-slate-950 uppercase mt-0.5">
-                Bathuary Gram Panchayat • Egra-II Block
+                Bathuary Gram Panchayat • Egra-II Development Block
               </h2>
             </div>
           </div>

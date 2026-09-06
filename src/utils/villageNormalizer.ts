@@ -2,7 +2,7 @@ import { VILLAGES_LIST } from '../data/bankMaster';
 export { normalizeSansadName, CANONICAL_16_SANSADS } from './sansadNormalizer';
 
 /**
- * 29 Canonical Villages of Bathuary Gram Panchayat, Egra-II Block, Purba Medinipur
+ * 29 Canonical Villages of Bathuary Gram Panchayat, Egra-II Development Block, Purba Medinipur
  */
 export const CANONICAL_29_VILLAGES: readonly string[] = VILLAGES_LIST;
 

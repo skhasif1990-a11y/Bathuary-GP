@@ -90,14 +90,19 @@ export const PrintSlipModal: React.FC<PrintSlipModalProps> = ({
             </div>
             
             <div className="text-center flex-1 px-3">
-              <h3 className="font-black text-base uppercase tracking-tight text-slate-900 leading-tight">
-                Bathuary Gram Panchayat
-              </h3>
-              <h4 className="font-extrabold text-xs text-emerald-800 uppercase">
+              <h4 className="font-black text-xs uppercase tracking-wider text-slate-950 leading-tight">
                 Govt. of West Bengal
               </h4>
-              <p className="text-[11px] text-slate-600">Egra-II Development Block, Purba Medinipur</p>
-              <p className="text-[11px] font-black text-slate-900 underline mt-1 tracking-wide">
+              <p className="font-extrabold text-[11px] text-emerald-800 uppercase tracking-wide leading-tight mt-0.5">
+                Panchayats & Rural Development
+              </p>
+              <h3 className="font-black text-base uppercase tracking-tight text-slate-900 leading-snug mt-0.5">
+                BATHUARY GRAM PANCHAYAT
+              </h3>
+              <p className="text-[11px] font-bold text-slate-600 mt-0.5">
+                Egra-II Development Block • Purba Medinipur
+              </p>
+              <p className="text-[11px] font-black text-slate-900 underline mt-1.5 tracking-wide">
                 Job Card e-KYC Acknowledgement Slip
               </p>
             </div>

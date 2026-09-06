@@ -373,7 +373,7 @@ export default function App() {
       />
 
       {/* RIGHT MAIN WORKSPACE (Adjusted for left sidebar) */}
-      <div className="lg:pl-72 flex-1 flex flex-col min-h-screen w-full transition-all duration-300">
+      <div className={`lg:pl-72 flex-1 flex flex-col min-h-screen w-full transition-all duration-300 ${(printRow || printA5Row) ? 'no-print' : ''}`}>
         
         {/* Header with Branding and Mobile Sidebar Toggle */}
         <Header

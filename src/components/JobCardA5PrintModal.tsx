@@ -25,6 +25,14 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
   const displayList = familyMembers.length > 0 ? familyMembers : [row];
 
   useEffect(() => {
+    // Add print isolation class to body while modal is open
+    document.body.classList.add('print-jobcard-modal-active');
+    return () => {
+      document.body.classList.remove('print-jobcard-modal-active');
+    };
+  }, []);
+
+  useEffect(() => {
     // Generate official verification QR Code safely
     try {
       const verifyPayload = `WB-GOVT|BATHUARY-GP|JC:${row.colH || ''}|HOH:${row.colAG || row.colJ || ''}|VILL:${row.colV || ''}|MEMBERS:${displayList.length}|VB-GRAM-G-ACT-VIKSIT-BHARAT`;
@@ -39,10 +47,16 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
   }, [row, displayList.length]);
 
   const handlePrint = () => {
+    const originalTitle = document.title;
     try {
+      document.title = `Bathuary_GP_JobCard_${row.colH || row.colJ || 'Citizen'}`;
       window.print();
     } catch (err) {
       console.warn('Print blocked or unavailable:', err);
+    } finally {
+      setTimeout(() => {
+        document.title = originalTitle;
+      }, 1000);
     }
   };
 
@@ -53,11 +67,11 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-3 overflow-y-auto no-print">
-      <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl p-3 sm:p-4 my-auto overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-3 overflow-y-auto print-modal-root print-jobcard-modal-root">
+      <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl p-3 sm:p-4 my-auto overflow-hidden print-modal-card">
         
-        {/* Modal Top Bar */}
-        <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
+        {/* Modal Top Bar - Hidden during Print */}
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 no-print">
           <div className="flex items-center gap-2 text-slate-900 font-bold text-xs sm:text-sm">
             <FileCheck className="w-4 h-4 text-sky-600" />
             <span>Job Card Print Preview</span>

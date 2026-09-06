@@ -18,6 +18,14 @@ export const PrintSlipModal: React.FC<PrintSlipModalProps> = ({
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
   useEffect(() => {
+    // Add print isolation class to body while modal is open
+    document.body.classList.add('print-slip-modal-active');
+    return () => {
+      document.body.classList.remove('print-slip-modal-active');
+    };
+  }, []);
+
+  useEffect(() => {
     // Generate official verification QR Code safely
     try {
       const verifyString = `BATHUARY-GP|JC:${row.colH || ''}|NAME:${row.colJ || ''}|KYC:${row.colR || ''}|DATE:${row.colS || 'N/A'}|VB-GRAM-G-ACT-VIKSIT-BHARAT`;
@@ -32,18 +40,24 @@ export const PrintSlipModal: React.FC<PrintSlipModalProps> = ({
   }, [row]);
 
   const handlePrint = () => {
+    const originalTitle = document.title;
     try {
+      document.title = `Bathuary_GP_AckSlip_${row.colH || row.colJ || 'Citizen'}`;
       window.print();
     } catch (err) {
       console.warn('Print blocked or unavailable:', err);
+    } finally {
+      setTimeout(() => {
+        document.title = originalTitle;
+      }, 1000);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto no-print">
-      <div className="relative w-full max-w-xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 overflow-hidden">
-        {/* Top Actions */}
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto print-modal-root print-slip-modal-root">
+      <div className="relative w-full max-w-xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 overflow-hidden print-modal-card">
+        {/* Top Actions - Hidden during Print */}
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 no-print">
           <div className="flex items-center gap-2 text-slate-900 font-black text-sm">
             <Printer className="w-4 h-4 text-emerald-600" />
             <span>Official Acknowledgement Slip</span>

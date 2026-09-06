@@ -489,13 +489,26 @@ app.get("/api/google-sheet/test-script", (req: Request, res: Response) => {
 });
 
 app.post("/api/google-sheet/test-script", async (req: Request, res: Response) => {
-  const targetUrl = (req.body.scriptUrl || activeAppsScriptUrl || "").trim();
+  let targetUrl = (req.body.scriptUrl || activeAppsScriptUrl || "").trim();
   
   if (!targetUrl) {
     return res.status(400).json({
       status: "error",
       message: "Please enter your Google Apps Script Web App URL."
     });
+  }
+
+  // Auto-expand if user pasted raw Deployment ID (e.g. AKfycb...)
+  if (!targetUrl.startsWith("http") && targetUrl.startsWith("AKfycb")) {
+    targetUrl = `https://script.google.com/macros/s/${targetUrl}/exec`;
+  }
+
+  // Auto-normalize if user missed /exec or has trailing slash
+  if (targetUrl.includes("script.google.com/macros/s/")) {
+    targetUrl = targetUrl.replace(/\/+$/, "");
+    if (!targetUrl.endsWith("/exec")) {
+      targetUrl = targetUrl + "/exec";
+    }
   }
 
   // 1. Check if user pasted a Google Spreadsheet link by mistake
@@ -522,12 +535,26 @@ app.post("/api/google-sheet/test-script", async (req: Request, res: Response) =>
     });
   }
 
+  // If forceSave is requested, save directly
+  if (req.body.forceSave === true) {
+    activeAppsScriptUrl = targetUrl;
+    return res.json({
+      status: "success",
+      message: "Google Apps Script Web App URL saved and activated successfully!",
+      scriptUrl: activeAppsScriptUrl,
+      isConnected: true
+    });
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     const pingResp = await fetch(targetUrl, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: { 
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      },
       signal: controller.signal,
       redirect: "follow"
     });
@@ -535,24 +562,34 @@ app.post("/api/google-sheet/test-script", async (req: Request, res: Response) =>
 
     const text = await pingResp.text();
 
-    // Check if Google returned an HTML page (Google login or access denied)
-    const isHtml = text.includes("<!DOCTYPE") || text.includes("<html") || text.includes("accounts.google.com") || text.includes("ServiceLogin");
-    
-    if (isHtml) {
+    // Specific Google Access Error Detection:
+    const isLoginHtml = text.includes("accounts.google.com") || text.includes("ServiceLogin");
+    const isFileNotFound = text.includes("找不到網頁") || text.includes("檔案不存在") || text.includes("Requested file does not exist") || text.includes("Page not found");
+
+    if (isLoginHtml) {
       return res.status(403).json({
         status: "error",
-        message: "Connection failed: Google returned an HTML login page instead of JSON. This happens when 'Who has access' was set to 'Only myself' during Apps Script deployment. Please open Apps Script > Deploy > Manage deployments > Edit > set 'Who has access' to 'Anyone' > Deploy, and test again."
+        message: "Google returned a login page. In Google Apps Script 'Manage deployments', please ensure you clicked the blue 'Deploy' button at the bottom-right after setting 'Who has access: Anyone'."
+      });
+    }
+
+    if (isFileNotFound) {
+      return res.status(404).json({
+        status: "error",
+        message: "Google says 'File does not exist'. Please verify that the blue 'Deploy' button was clicked in Manage deployments, and click the 'Copy' button directly under 'Web app URL' (make sure not to copy the Deployment ID by mistake, and that it ends with /exec)."
       });
     }
 
     let parsed: any = null;
     try { parsed = JSON.parse(text); } catch (e) {}
 
+    // If HTTP status is 200, the Web App is publicly reachable!
     if (pingResp.ok) {
       activeAppsScriptUrl = targetUrl;
       return res.json({
         status: "success",
-        message: "Connection verified! Your Google Sheet is successfully linked for Live Two-Way Auto-Sync.",
+        message: "Connection verified! Your Google Apps Script is active and linked for Live Two-Way Auto-Sync.",
+        scriptUrl: activeAppsScriptUrl,
         response: parsed || { status: "success" }
       });
     } else {

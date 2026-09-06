@@ -13,7 +13,8 @@ import {
   Sparkles,
   Zap,
   Copy,
-  Check
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { BeneficiaryRow } from '../types';
@@ -241,13 +242,28 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
   };
 
   const handleSaveAndTestGas = async () => {
-    const trimmed = gasUrl.trim();
+    let trimmed = gasUrl.trim();
     if (!trimmed) {
       setStatusMessage({
         type: 'error',
         text: 'Please enter your Google Apps Script Web App URL.'
       });
       return;
+    }
+
+    // Auto-expand if user pasted raw Deployment ID (e.g. starts with AKfycb...)
+    if (!trimmed.startsWith('http') && trimmed.startsWith('AKfycb')) {
+      trimmed = `https://script.google.com/macros/s/${trimmed}/exec`;
+      setGasUrl(trimmed);
+    }
+
+    // Auto-normalize if user missed /exec or has trailing slash
+    if (trimmed.includes('script.google.com/macros/s/')) {
+      trimmed = trimmed.replace(/\/+$/, '');
+      if (!trimmed.endsWith('/exec')) {
+        trimmed = trimmed + '/exec';
+        setGasUrl(trimmed);
+      }
     }
 
     // Proactive check: Did user paste a Google Spreadsheet link?
@@ -309,10 +325,13 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
       try {
         testData = JSON.parse(responseText);
       } catch (jsonErr) {
-        if (responseText.includes('<!DOCTYPE') || responseText.includes('<html') || responseText.includes('accounts.google.com')) {
-          throw new Error('Google returned an HTML login page instead of JSON. This happens when Apps Script was deployed with "Who has access: Only myself". Please open Apps Script > Deploy > Manage deployments > Edit > set "Who has access" to "Anyone" > Deploy again.');
+        if (responseText.includes('accounts.google.com') || responseText.includes('ServiceLogin')) {
+          throw new Error('Google returned a login page. In Google Apps Script Manage deployments, please ensure you clicked the blue "Deploy" button at the bottom-right after setting "Who has access: Anyone".');
         }
-        throw new Error(responseText.slice(0, 100) || 'Unexpected response format received');
+        if (responseText.includes('找不到網頁') || responseText.includes('檔案不存在') || responseText.includes('Requested file does not exist') || responseText.includes('Page not found')) {
+          throw new Error('Google says "File does not exist". Please verify that the blue "Deploy" button was clicked in Manage deployments, and click the "Copy" button directly under "Web app URL" (ensure it ends with /exec).');
+        }
+        throw new Error(responseText.slice(0, 100) || 'Unexpected response received from Google');
       }
 
       if (testRes.ok && testData && testData.status === 'success') {
@@ -324,7 +343,7 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
       } else {
         setStatusMessage({
           type: 'error',
-          text: testData?.message || 'Could not reach Google Apps Script. Verify that Deploy > Web app had "Who has access" set to "Anyone".'
+          text: testData?.message || 'Could not reach Google Apps Script. Verify that Deploy > Web app had "Who has access" set to "Anyone" and the blue "Deploy" button was clicked.'
         });
       }
     } catch (e: any) {
@@ -334,6 +353,42 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
       });
     } finally {
       setIsTestingGas(false);
+    }
+  };
+
+  // Force-save Web App URL directly without waiting for ping verification
+  const handleForceSaveGas = async () => {
+    let trimmed = gasUrl.trim();
+    if (!trimmed) {
+      setStatusMessage({ type: 'error', text: 'Please enter your Google Apps Script Web App URL first.' });
+      return;
+    }
+    if (!trimmed.startsWith('http') && trimmed.startsWith('AKfycb')) {
+      trimmed = `https://script.google.com/macros/s/${trimmed}/exec`;
+      setGasUrl(trimmed);
+    }
+    if (trimmed.includes('script.google.com/macros/s/')) {
+      trimmed = trimmed.replace(/\/+$/, '');
+      if (!trimmed.endsWith('/exec')) {
+        trimmed = trimmed + '/exec';
+        setGasUrl(trimmed);
+      }
+    }
+
+    try {
+      await fetch('/api/google-sheet/test-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scriptUrl: trimmed, forceSave: true })
+      });
+      safeStorage.setItem('bathuary_gas_url', trimmed);
+      setIsGasConnected(true);
+      setStatusMessage({
+        type: 'success',
+        text: '✓ Google Apps Script Web App URL saved and activated! When updating beneficiary records, real-time sync will now be dispatched to this Google Apps Script endpoint.'
+      });
+    } catch (e: any) {
+      setStatusMessage({ type: 'error', text: `Save error: ${e.message}` });
     }
   };
 
@@ -876,7 +931,7 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Google Apps Script Web App URL:
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={gasUrl}
@@ -884,26 +939,59 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
                   placeholder="https://script.google.com/macros/s/.../exec"
                   className="flex-1 bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono shadow-inner"
                 />
-                <button
-                  onClick={handleSaveAndTestGas}
-                  disabled={isTestingGas || !gasUrl.trim()}
-                  className="px-4 py-2.5 rounded-xl btn-3d-save text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingGas ? 'animate-spin' : ''}`} />
-                  <span>{isTestingGas ? 'Testing...' : 'Save & Test'}</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveAndTestGas}
+                    disabled={isTestingGas || !gasUrl.trim()}
+                    className="px-4 py-2.5 rounded-xl btn-3d-save text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
+                    title="Test connection and activate live sync"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingGas ? 'animate-spin' : ''}`} />
+                    <span>{isTestingGas ? 'Testing...' : 'Save & Test'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleForceSaveGas}
+                    disabled={!gasUrl.trim()}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1 cursor-pointer whitespace-nowrap disabled:opacity-40"
+                    title="Save this URL directly without ping test"
+                  >
+                    <span>Save Anyway</span>
+                  </button>
+                </div>
               </div>
-              <p className="text-[11px] text-slate-600 mt-1">
-                URL-টি অবশ্যই <code>https://script.google.com/macros/s/.../exec</code> দিয়ে শেষ হতে হবে।
-              </p>
-              {/* Notice for Anyone access */}
-              <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-start gap-2">
+
+              <div className="flex items-center justify-between mt-1 text-[11px] text-slate-600">
+                <span>URL-টি অবশ্যই <code>https://script.google.com/macros/s/.../exec</code> দিয়ে শেষ হতে হবে।</span>
+                {gasUrl.trim() && gasUrl.includes('script.google.com') && (
+                  <a
+                    href={gasUrl.trim().endsWith('/exec') ? gasUrl.trim() : `${gasUrl.trim().replace(/\/+$/, '')}/exec`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-700 font-bold hover:underline ml-2 whitespace-nowrap"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Test in New Tab</span>
+                  </a>
+                )}
+              </div>
+
+              {/* Notice for Manage Deployments step */}
+              <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="font-semibold text-amber-950">গুরুত্বপূর্ণ সমাধান (Why "Unexpected token &lt;" error happens):</strong>
-                  <p className="mt-0.5 text-amber-800 leading-normal">
-                    যদি <em>&quot;Unexpected token &lt;&quot;</em> এরর দেখায়, তার অর্থ Apps Script ডিপ্লয় করার সময় <strong>&quot;Who has access&quot;</strong> অপশনে &quot;Only myself&quot; ছিল, যার ফলে গুগল লগইন পেজ পাঠাচ্ছে। সমাধান: Apps Script পেজে গিয়ে <strong>Deploy ➔ Manage deployments ➔ Edit (পেন্সিল)</strong> ➔ <strong>Who has access: &quot;Anyone&quot;</strong> সিলেক্ট করে <strong>Deploy</strong> করুন।
-                  </p>
+                <div className="space-y-1">
+                  <strong className="font-bold text-amber-950 block">আপনার স্ক্রিনশট অনুযায়ী ৩টি জরুরি পদক্ষেপ (Must follow steps):</strong>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-amber-800 leading-normal pl-0.5">
+                    <li>
+                      <strong>নীল Deploy বাটনে ক্লিক করুন:</strong> আপনার স্ক্রিনে 'Who has access: Anyone' নির্বাচন করা আছে, কিন্তু নিচে ডানপাশের <strong>নীল [Deploy] বাটনে ক্লিক করতে হবে</strong>। Deploy বাটনে ক্লিক না করলে গুগল সার্ভার পরিবর্তন সেভ করবে না।
+                    </li>
+                    <li>
+                      <strong>সঠিক Web app URL কপি করুন:</strong> Deploy বাটনে ক্লিক করার পর Google 'Deployment successfully updated' দেখাবে। সেখানে <em>'Web app'</em> সেকশনের নিচে থাকা <strong>[Copy]</strong> বাটনে ক্লিক করে লিঙ্ক কপি করুন (কখনোই Deployment ID কপি করবেন না)।
+                    </li>
+                    <li>
+                      <strong>লিঙ্কের শেষে /exec থাকা আবশ্যক:</strong> কপি করা লিঙ্কের শেষে যেন <code>/exec</code> থাকে। তারপর উপরের বক্সে পেস্ট করে <strong>'Save & Test'</strong> বা <strong>'Save Anyway'</strong> বাটনে ক্লিক করুন।
+                    </li>
+                  </ol>
                 </div>
               </div>
             </div>

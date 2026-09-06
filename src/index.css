@@ -170,32 +170,83 @@
 
 /* Print Styles */
 @media print {
-  body {
+  html, body {
     background: #ffffff !important;
     color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  .no-print {
+  .no-print,
+  .print\:hidden {
     display: none !important;
   }
-  .print-only {
+  .print-only,
+  .print\:block {
     display: block !important;
   }
+
+  /* When print modals are active, hide all main application siblings */
+  body.print-slip-modal-active > #root > div > *:not(.print-slip-modal-root),
+  body.print-jobcard-modal-active > #root > div > *:not(.print-jobcard-modal-root) {
+    display: none !important;
+  }
+
+  /* Ensure modal overlays don't create grey backgrounds, shadows or extra pages */
+  .print-modal-root {
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .print-modal-card {
+    position: static !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    background: transparent !important;
+  }
+
   #printableA5SlipArea {
+    display: block !important;
     width: 100% !important;
-    max-width: 140mm !important;
+    max-width: 138mm !important;
     margin: 0 auto !important;
-    border: 1px solid #334155 !important;
+    border: 1.5px solid #0f172a !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
     page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
+
   #printableSlipArea {
+    display: block !important;
     width: 100% !important;
-    max-width: 140mm !important;
+    max-width: 138mm !important;
     margin: 0 auto !important;
-    border: 1px solid #334155 !important;
+    border: 1.5px solid #0f172a !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
     page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
+
   @page {
-    margin: 8mm;
-    size: A5 portrait;
+    margin: 6mm 8mm;
+    size: auto;
   }
 }

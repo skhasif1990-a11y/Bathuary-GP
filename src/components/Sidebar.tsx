@@ -93,14 +93,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpen && (
         <div 
           onClick={onClose} 
-          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-xs lg:hidden transition-opacity"
+          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-xs lg:hidden transition-opacity no-print"
         />
       )}
 
       {/* Main Sidebar Container */}
       <aside 
         id="app-left-sidebar"
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 sm:w-80 bg-[#0B132B] text-slate-100 flex flex-col border-r border-slate-800 shadow-2xl transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 sm:w-80 bg-[#0B132B] text-slate-100 flex flex-col border-r border-slate-800 shadow-2xl transition-transform duration-300 ease-in-out lg:translate-x-0 no-print ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

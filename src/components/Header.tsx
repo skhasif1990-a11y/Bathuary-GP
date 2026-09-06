@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs transition-all">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs transition-all no-print">
       {/* Top Deep Blue Government Banner */}
       <div className="bg-[#0B132B] px-4 sm:px-6 py-2.5 text-xs text-slate-200 border-b border-slate-800">
         <div className="flex flex-wrap justify-between items-center gap-2">

@@ -202,14 +202,30 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
               </div>
 
               {/* Row 4: Job Card Submitted */}
-              <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 col-span-2">
+              <div className="flex items-center gap-2 col-span-2">
                 <span className="font-bold text-slate-600 whitespace-nowrap min-w-[110px]">
                   JOB CARD SUBMITTED:
                 </span>
-                <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 text-[10px]">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                  <span>{row.colW || 'Yes'}</span>
-                </span>
+                {(() => {
+                  const val = (row.colW || 'Yes').trim();
+                  const isNo = val.toLowerCase() === 'no' || val === 'না';
+                  return (
+                    <span
+                      className={`inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded border w-fit shrink-0 ${
+                        isNo
+                          ? 'text-rose-800 bg-rose-50 border-rose-300'
+                          : 'text-emerald-800 bg-emerald-50 border-emerald-300'
+                      }`}
+                    >
+                      {isNo ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block shrink-0" />
+                      ) : (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                      )}
+                      <span className="whitespace-nowrap">{val || 'Yes'}</span>
+                    </span>
+                  );
+                })()}
               </div>
 
             </div>

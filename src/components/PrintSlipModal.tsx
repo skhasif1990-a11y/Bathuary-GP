@@ -96,7 +96,7 @@ export const PrintSlipModal: React.FC<PrintSlipModalProps> = ({
               <h4 className="font-extrabold text-xs text-emerald-800 uppercase">
                 Govt. of West Bengal
               </h4>
-              <p className="text-[11px] text-slate-600">Hatbaincha, Egra-II Development Block, Purba Medinipur</p>
+              <p className="text-[11px] text-slate-600">Egra-II Development Block, Purba Medinipur</p>
               <p className="text-[11px] font-black text-slate-900 underline mt-1 tracking-wide">
                 Job Card e-KYC Acknowledgement Slip
               </p>

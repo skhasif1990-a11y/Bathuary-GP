@@ -159,56 +159,96 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
 
   const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
+  // Quick category statistics for the currently filtered set
+  const stats = useMemo(() => {
+    let done = 0;
+    let pending = 0;
+    let death = 0;
+    filteredRows.forEach(r => {
+      const kyc = (r.colR || '').toUpperCase();
+      const err = (r.colT || '').toLowerCase();
+      if (err.includes('death') || err.includes('expired') || err.includes('died')) {
+        death++;
+      } else if (kyc === 'YES' || kyc === 'Y') {
+        done++;
+      } else {
+        pending++;
+      }
+    });
+    const total = filteredRows.length;
+    const rate = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, pending, death, rate };
+  }, [filteredRows]);
+
   return (
     <div className="space-y-6">
       {/* Top Filter & Control Card (Hidden when printing) */}
-      <div className="rounded-3xl bg-white border border-slate-200 p-6 sm:p-7 shadow-sm no-print">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
-              <FileText className="w-5 h-5" />
+      <div className="rounded-3xl bg-gradient-to-br from-white via-slate-50 to-indigo-50/20 border-2 border-slate-200 p-6 sm:p-7 shadow-sm no-print relative overflow-hidden">
+        <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 absolute top-0 left-0" />
+        
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4 mb-5">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <FileText className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg sm:text-xl font-black text-slate-900">
-                Village & Sansad Analytical Report
-              </h3>
-              <p className="text-xs text-slate-500">
-                Filter across all 29 villages & 16 Sansads with export-ready A4 PDF and Excel options.
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                  Village & Sansad Analytical Report
+                </h3>
+                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-black uppercase tracking-wider">
+                  Official Register
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Multi-criteria filter across all 29 villages & 16 Sansads with export-ready A4 PDF and Excel options.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               type="button"
               onClick={handleExportExcel}
-              className="px-3.5 py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs rounded-xl border border-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              className="px-4 py-2.5 bg-white hover:bg-emerald-50 text-emerald-800 font-black text-xs rounded-xl border-2 border-emerald-300 hover:border-emerald-500 flex items-center gap-2 transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Export Excel ({filteredRows.length})</span>
+              <Download className="w-4 h-4 text-emerald-600" />
+              <span>Export Excel ({filteredRows.length.toLocaleString()})</span>
             </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-2 btn-3d-save text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-xl shadow-md hover:shadow-lg flex items-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <Printer className="w-4 h-4" />
               <span>Print A4 Report</span>
             </button>
           </div>
         </div>
 
-        {/* Filter Dropdowns Grid */}
+        {/* Filter Dropdowns Grid with Dynamic Colorful Borders */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
           {/* Sansad Filter */}
-          <div>
-            <label className="text-xs font-bold text-slate-800 mb-1.5 block">
-              Filter by Sansad:
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+            <label className="text-xs font-black text-slate-800 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                <span>Filter by Sansad:</span>
+              </span>
+              {selectedSansad && (
+                <button
+                  type="button"
+                  onClick={() => handleFilterChange(() => setSelectedSansad(''))}
+                  className="text-[10px] text-rose-600 hover:underline font-bold"
+                >
+                  Clear
+                </button>
+              )}
             </label>
             <select
               value={selectedSansad}
               onChange={(e) => handleFilterChange(() => setSelectedSansad(e.target.value))}
-              className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
+              className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl px-3 py-2 border-2 border-slate-200 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
             >
               <option value="">-- ALL SANSADS (1-16) --</option>
               {SANSAD_LIST.map(s => (
@@ -218,14 +258,26 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
           </div>
 
           {/* Village Filter */}
-          <div>
-            <label className="text-xs font-bold text-slate-800 mb-1.5 block">
-              Filter by Village:
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+            <label className="text-xs font-black text-slate-800 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>Filter by Village:</span>
+              </span>
+              {selectedVillage && (
+                <button
+                  type="button"
+                  onClick={() => handleFilterChange(() => setSelectedVillage(''))}
+                  className="text-[10px] text-rose-600 hover:underline font-bold"
+                >
+                  Clear
+                </button>
+              )}
             </label>
             <select
               value={selectedVillage}
               onChange={(e) => handleFilterChange(() => setSelectedVillage(e.target.value))}
-              className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
+              className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl px-3 py-2 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
             >
               <option value="">-- ALL 29 VILLAGES --</option>
               {VILLAGES_LIST.map(v => (
@@ -235,26 +287,32 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
           </div>
 
           {/* Status Filter */}
-          <div>
-            <label className="text-xs font-bold text-slate-800 mb-1.5 block">
-              Filter by Status:
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+            <label className="text-xs font-black text-slate-800 mb-1.5 block">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span>Filter by Status:</span>
+              </span>
             </label>
             <select
               value={selectedCategory}
               onChange={(e) => handleFilterChange(() => setSelectedCategory(e.target.value as any))}
-              className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
+              className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl px-3 py-2 border-2 border-slate-200 focus:border-amber-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
             >
-              <option value="ALL">All Records</option>
-              <option value="DONE">e-KYC Completed (✓)</option>
-              <option value="PENDING">e-KYC Pending (⏳)</option>
-              <option value="DEATH">Expired / Deceased (✕)</option>
+              <option value="ALL">All Records ({beneficiaries.length})</option>
+              <option value="DONE">✓ e-KYC Completed</option>
+              <option value="PENDING">⏳ e-KYC Pending</option>
+              <option value="DEATH">✕ Expired / Deceased</option>
             </select>
           </div>
 
           {/* Search Filter */}
-          <div>
-            <label className="text-xs font-bold text-slate-800 mb-1.5 block">
-              Search Table Records:
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+            <label className="text-xs font-black text-slate-800 mb-1.5 block">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                <span>Search Inside Results:</span>
+              </span>
             </label>
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -263,29 +321,58 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                 placeholder="Job Card, Name, Aadhaar..."
                 value={searchTerm}
                 onChange={(e) => handleFilterChange(() => setSearchTerm(e.target.value))}
-                className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl pl-9 pr-3 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all shadow-xs"
+                className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl pl-9 pr-3 py-2 border-2 border-slate-200 focus:border-blue-500 focus:bg-white focus:outline-none transition-all shadow-2xs"
               />
             </div>
           </div>
         </div>
 
+        {/* Dynamic Mini-Metrics Bar for the Active Filtered Slice */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mt-4">
+          <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-center shadow-2xs">
+            <span className="text-[10px] font-bold text-slate-500 block uppercase">Total Selected</span>
+            <span className="text-base sm:text-lg font-black text-slate-900">{stats.total.toLocaleString()}</span>
+          </div>
+          <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200 text-center shadow-2xs">
+            <span className="text-[10px] font-bold text-emerald-700 block uppercase">e-KYC Done</span>
+            <span className="text-base sm:text-lg font-black text-emerald-800">✓ {stats.done.toLocaleString()}</span>
+          </div>
+          <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200 text-center shadow-2xs">
+            <span className="text-[10px] font-bold text-amber-700 block uppercase">e-KYC Pending</span>
+            <span className="text-base sm:text-lg font-black text-amber-800">⏳ {stats.pending.toLocaleString()}</span>
+          </div>
+          <div className="bg-rose-50/70 p-2.5 rounded-xl border border-rose-200 text-center shadow-2xs">
+            <span className="text-[10px] font-bold text-rose-700 block uppercase">Deceased / Death</span>
+            <span className="text-base sm:text-lg font-black text-rose-800">✕ {stats.death.toLocaleString()}</span>
+          </div>
+          <div className="col-span-2 sm:col-span-1 bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-200 text-center shadow-2xs flex flex-col justify-center">
+            <span className="text-[10px] font-bold text-indigo-700 block uppercase">Completion Rate</span>
+            <div className="flex items-center justify-center gap-1.5 mt-0.5">
+              <span className="text-base sm:text-lg font-black text-indigo-900">{stats.rate}%</span>
+              <div className="w-12 bg-indigo-200 h-2 rounded-full overflow-hidden">
+                <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${stats.rate}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* A4 Print Setup Preferences Bar */}
-        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-50/70 p-3 rounded-2xl border border-slate-200">
+        <div className="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center gap-2">
-            <SlidersHorizontal className="w-4 h-4 text-emerald-700" />
-            <span className="font-extrabold text-slate-800">A4 Print Setup:</span>
+            <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
+            <span className="font-black text-slate-900">A4 Print Setup:</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
             {/* Orientation */}
             <div className="flex items-center gap-2">
-              <span className="text-slate-600 font-semibold">Orientation:</span>
-              <div className="inline-flex rounded-lg p-0.5 bg-slate-200">
+              <span className="text-slate-600 font-bold">Orientation:</span>
+              <div className="inline-flex rounded-lg p-0.5 bg-slate-100 border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setPrintOrientation('LANDSCAPE')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                    printOrientation === 'LANDSCAPE' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                  className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                    printOrientation === 'LANDSCAPE' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Landscape (Recommended)
@@ -293,8 +380,8 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                 <button
                   type="button"
                   onClick={() => setPrintOrientation('PORTRAIT')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                    printOrientation === 'PORTRAIT' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                  className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                    printOrientation === 'PORTRAIT' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Portrait
@@ -304,16 +391,16 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
 
             {/* Print Scope */}
             <div className="flex items-center gap-2">
-              <span className="text-slate-600 font-semibold">Print Scope:</span>
-              <div className="inline-flex rounded-lg p-0.5 bg-slate-200">
+              <span className="text-slate-600 font-bold">Print Scope:</span>
+              <div className="inline-flex rounded-lg p-0.5 bg-slate-100 border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setPrintScope('ALL')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                    printScope === 'ALL' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600'
+                  className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                    printScope === 'ALL' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  All Filtered ({filteredRows.length})
+                  All Filtered ({filteredRows.length.toLocaleString()})
                 </button>
                 <button
                   type="button"
@@ -462,19 +549,25 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                 return (
                   <tr 
                     key={`${row.colH}-${row.colJ}-${idx}`} 
-                    className={`${idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'} hover:bg-slate-100 transition-colors print:bg-transparent print:break-inside-avoid`}
+                    className={`${
+                      isDone 
+                        ? 'hover:bg-emerald-50/50 bg-white' 
+                        : isDead 
+                          ? 'hover:bg-rose-50/50 bg-rose-50/20' 
+                          : 'hover:bg-amber-50/50 bg-amber-50/10'
+                    } transition-colors print:bg-transparent print:break-inside-avoid`}
                   >
                     <td className="p-2.5 sm:p-3 text-center font-bold text-slate-600 border-r border-slate-200 print:border-slate-300 print:p-1.5 print:text-black">{absoluteIndex}</td>
-                    <td className="p-2.5 sm:p-3 font-bold text-slate-900 border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colB}</td>
-                    <td className="p-2.5 sm:p-3 font-mono font-black text-slate-900 border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colH}</td>
-                    <td className="p-2.5 sm:p-3 font-bold text-slate-950 uppercase border-r border-slate-200 print:border-slate-300 print:p-1.5">{row.colJ}</td>
-                    <td className="p-2.5 sm:p-3 text-slate-700 uppercase border-r border-slate-200 print:border-slate-300 print:p-1.5">{row.colAG || "—"}</td>
-                    <td className="p-2.5 sm:p-3 text-slate-800 border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colV}</td>
-                    <td className="p-2.5 sm:p-3 font-mono text-slate-600 border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5 print:text-black">
+                    <td className="p-2.5 sm:p-3 font-black text-slate-900 border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colB}</td>
+                    <td className="p-2.5 sm:p-3 font-mono font-black text-blue-900 border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colH}</td>
+                    <td className="p-2.5 sm:p-3 font-black text-slate-950 uppercase border-r border-slate-200 print:border-slate-300 print:p-1.5">{row.colJ}</td>
+                    <td className="p-2.5 sm:p-3 text-slate-700 uppercase font-medium border-r border-slate-200 print:border-slate-300 print:p-1.5">{row.colAG || "—"}</td>
+                    <td className="p-2.5 sm:p-3 text-slate-800 font-bold border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colV}</td>
+                    <td className="p-2.5 sm:p-3 font-mono text-slate-700 font-bold border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5 print:text-black">
                       {row.colP ? `•••• ${row.colP.slice(-4)}` : "—"}
                     </td>
                     <td className="p-2.5 sm:p-3 text-center border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black uppercase print:border print:border-black print:px-1 ${
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase shadow-2xs print:border print:border-black print:px-1 ${
                         isDone 
                           ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
                           : isDead 
@@ -489,7 +582,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                         <button
                           type="button"
                           onClick={() => onPrintSlip(row)}
-                          className="px-2.5 py-1.5 rounded-xl btn-3d-slip text-white font-bold text-[10px] flex items-center justify-center gap-1 cursor-pointer shadow-xs hover:shadow-sm transition-all whitespace-nowrap"
+                          className="px-2.5 py-1.5 rounded-xl btn-3d-slip text-white font-black text-[10px] flex items-center justify-center gap-1 cursor-pointer shadow-xs hover:shadow-md transition-all whitespace-nowrap"
                           title="Print Citizen Acknowledgement Slip"
                         >
                           <Printer className="w-3 h-3" />
@@ -498,7 +591,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                         <button
                           type="button"
                           onClick={() => onPrintA5Slip(row)}
-                          className="px-3 py-1.5 rounded-xl btn-3d-jobcard text-white font-extrabold text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-xs hover:shadow-md transition-all whitespace-nowrap"
+                          className="px-3 py-1.5 rounded-xl btn-3d-jobcard text-white font-black text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-xs hover:shadow-md transition-all whitespace-nowrap"
                           title="Official Job Card Print (A5 Verification Certificate)"
                         >
                           <FileCheck className="w-3.5 h-3.5" />

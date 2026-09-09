@@ -544,19 +544,26 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Search & Select Controls */}
-      <div className="rounded-3xl bg-white border border-slate-200 p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
-              <FileEdit className="w-5 h-5" />
+      {/* Top Search & Select Controls with Colorful Gradient Border */}
+      <div className="rounded-3xl bg-gradient-to-br from-white via-slate-50 to-emerald-50/20 border-2 border-slate-200 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+        <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500 absolute top-0 left-0" />
+        
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-200/80 pb-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30">
+              <FileEdit className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                Job Card Data Update & Verification
-              </h3>
-              <p className="text-xs text-slate-500">
-                Select Aadhaar or Job Card to view and modify beneficiary details.
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                  Job Card Data Update & Verification
+                </h3>
+                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
+                  Live Editor
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Select Aadhaar, Job Card, or Applicant Name to view and modify beneficiary records with live sync.
               </p>
             </div>
           </div>
@@ -566,22 +573,22 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
             <button
               type="button"
               onClick={() => onOpenSyncModal('sheetLink')}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold transition-all cursor-pointer self-start sm:self-auto shadow-xs"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-300 text-emerald-800 text-xs font-black transition-all cursor-pointer self-start sm:self-auto shadow-xs hover:shadow-md"
               title="Click to check or configure Google Sheet Live Sync"
             >
-              <Zap className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+              <Zap className="w-4 h-4 text-emerald-600 fill-emerald-600" />
               <span>Google Sheet Live Sync</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             </button>
           )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Aadhaar Fast Search & Combobox */}
-          <div ref={aadhaarDropdownRef} className="relative">
+          <div ref={aadhaarDropdownRef} className="relative bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <IdCard className="w-3.5 h-3.5 text-emerald-600" />
+              <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <IdCard className="w-4 h-4 text-emerald-600" />
                 <span>Aadhaar Number (Col P):</span>
               </label>
               {aadhaarSearch && (
@@ -592,7 +599,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                     setSelectedAadhaar('');
                     setIsAadhaarOpen(false);
                   }}
-                  className="text-[11px] text-slate-400 hover:text-rose-600 font-semibold flex items-center gap-0.5 cursor-pointer"
+                  className="text-[11px] text-slate-400 hover:text-rose-600 font-bold flex items-center gap-0.5 cursor-pointer"
                 >
                   <X className="w-3 h-3" /> Clear
                 </button>
@@ -608,7 +615,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                 value={aadhaarSearch}
                 onFocus={() => setIsAadhaarOpen(true)}
                 onChange={(e) => handleAadhaarInputChange(e.target.value)}
-                className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl pl-9 pr-8 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all shadow-xs"
+                className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl pl-9 pr-8 py-2 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all shadow-2xs"
               />
               <button
                 type="button"
@@ -621,7 +628,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
 
             {/* Aadhaar Live Search Dropdown */}
             {isAadhaarOpen && (
-              <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl border-2 border-emerald-500 shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+              <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-2xl border-2 border-emerald-500 shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
                 {filteredAadhaarRecords.length > 0 ? (
                   <>
                     <div className="px-3 py-1.5 bg-emerald-50 text-[11px] font-bold text-emerald-800 flex justify-between items-center">
@@ -664,10 +671,10 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           </div>
 
           {/* Job Card Fast Search & Combobox */}
-          <div ref={jobCardDropdownRef} className="relative">
+          <div ref={jobCardDropdownRef} className="relative bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+              <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-indigo-600" />
                 <span>Job Card Number (Col H):</span>
               </label>
               {jobCardSearch && (
@@ -679,7 +686,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                     setSelectedApplicant('');
                     setIsJobCardOpen(false);
                   }}
-                  className="text-[11px] text-slate-400 hover:text-rose-600 font-semibold flex items-center gap-0.5 cursor-pointer"
+                  className="text-[11px] text-slate-400 hover:text-rose-600 font-bold flex items-center gap-0.5 cursor-pointer"
                 >
                   <X className="w-3 h-3" /> Clear
                 </button>
@@ -695,7 +702,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                 value={jobCardSearch}
                 onFocus={() => setIsJobCardOpen(true)}
                 onChange={(e) => handleJobCardInputChange(e.target.value)}
-                className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl pl-9 pr-8 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all shadow-xs"
+                className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl pl-9 pr-8 py-2 border-2 border-slate-200 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all shadow-2xs"
               />
               <button
                 type="button"
@@ -708,10 +715,10 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
 
             {/* Job Card Live Search Dropdown */}
             {isJobCardOpen && (
-              <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-2xl border-2 border-emerald-500 shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+              <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-2xl border-2 border-indigo-500 shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
                 {filteredJobCards.length > 0 ? (
                   <>
-                    <div className="px-3 py-1.5 bg-emerald-50 text-[11px] font-bold text-emerald-800 flex justify-between items-center">
+                    <div className="px-3 py-1.5 bg-indigo-50 text-[11px] font-bold text-indigo-800 flex justify-between items-center">
                       <span>Found {filteredJobCards.length} match(es)</span>
                       <span>Click to select</span>
                     </div>
@@ -720,7 +727,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                         key={`${b.colH}-${b.colJ}-${idx}`}
                         type="button"
                         onClick={() => handleSelectJobCardMatch(b.colH, b.colJ)}
-                        className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/70 transition-colors flex items-center justify-between group cursor-pointer"
+                        className="w-full text-left px-3.5 py-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between group cursor-pointer"
                       >
                         <div>
                           <div className="font-mono font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
@@ -735,7 +742,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                             <span>• {b.colB}</span>
                           </div>
                         </div>
-                        <span className="text-xs font-bold text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
                           Select →
                         </span>
                       </button>
@@ -751,14 +758,14 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           </div>
 
           {/* Applicant Select */}
-          <div>
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-emerald-600" />
+              <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <User className="w-4 h-4 text-amber-600" />
                 <span>Applicant Name (Col J):</span>
               </label>
               {selectedApplicant && (
-                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                   Active
                 </span>
               )}
@@ -767,7 +774,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
               value={selectedApplicant}
               disabled={!selectedJobCard}
               onChange={(e) => setSelectedApplicant(e.target.value)}
-              className={`w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all cursor-pointer shadow-xs ${
+              className={`w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl px-3 py-2 border-2 border-slate-200 focus:border-amber-500 focus:bg-white focus:outline-none transition-all cursor-pointer shadow-2xs ${
                 !selectedJobCard ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
@@ -802,16 +809,62 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
       {/* Main Data Form */}
       {activeRow ? (
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Dynamic Active Citizen Summary Bar */}
+          <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-slate-800">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 font-black text-2xl flex items-center justify-center shadow-lg shrink-0">
+                {(activeRow.colJ || 'C').charAt(0)}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-lg sm:text-xl font-black text-white tracking-wide uppercase">
+                    {activeRow.colJ}
+                  </h3>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                    (formData.colR || '').toUpperCase() === 'YES' || (formData.colR || '').toUpperCase() === 'Y'
+                      ? 'bg-emerald-500 text-slate-950'
+                      : 'bg-amber-400 text-slate-950'
+                  }`}>
+                    {(formData.colR || '').toUpperCase() === 'YES' || (formData.colR || '').toUpperCase() === 'Y' ? "✓ e-KYC Done" : "⏳ e-KYC Pending"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 mt-1 font-medium">
+                  <span className="font-mono text-emerald-300 font-bold">JC: {activeRow.colH}</span>
+                  <span>• Sansad: <b className="text-white">{activeRow.colB}</b></span>
+                  <span>• Village: <b className="text-white">{activeRow.colV}</b></span>
+                  <span>• Row #{activeRow.rowIndex}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveRow(null);
+                  setSelectedJobCard('');
+                  setSelectedApplicant('');
+                  setSelectedAadhaar('');
+                  setJobCardSearch('');
+                  setAadhaarSearch('');
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/20 cursor-pointer"
+              >
+                Change Record
+              </button>
+            </div>
+          </div>
+
           {/* Section 1: Read Only Information (Col A - Col O, AF, AG) */}
-          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+          <div className="rounded-3xl bg-gradient-to-br from-white to-blue-50/20 border-2 border-slate-200 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-200/80 pb-3">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-                <h4 className="text-sm sm:text-base font-extrabold text-slate-800">
+                <span className="w-3 h-3 rounded-full bg-indigo-600 ring-4 ring-indigo-100" />
+                <h4 className="text-sm sm:text-base font-black text-slate-900">
                   Official Master Records (Col A - O, AF, AG) [Read Only]
                 </h4>
               </div>
-              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+              <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
                 Row #{activeRow.rowIndex}
               </span>
             </div>
@@ -836,11 +889,11 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           </div>
 
           {/* Section 2: Editable e-KYC Data (Col P - Col X) */}
-          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-              <h4 className="text-sm sm:text-base font-extrabold text-slate-800">
-                Data Entry & e-KYC Update (Col P - Col X)
+          <div className="rounded-3xl bg-gradient-to-br from-white to-emerald-50/20 border-2 border-emerald-200 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4 border-b border-emerald-100 pb-3">
+              <span className="w-3 h-3 rounded-full bg-emerald-600 ring-4 ring-emerald-100" />
+              <h4 className="text-sm sm:text-base font-black text-slate-900">
+                Data Entry & e-KYC Verification (Col P - Col X)
               </h4>
             </div>
 
@@ -1013,24 +1066,24 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           </div>
 
           {/* Section 3: Bank Details (Col AO - Col AR) with Merger Normalization */}
-          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+          <div className="rounded-3xl bg-gradient-to-br from-white to-amber-50/20 border-2 border-amber-200 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4 border-b border-amber-100 pb-3">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <h4 className="text-sm sm:text-base font-extrabold text-slate-800">
-                  Bank Account Details (Col AO - Col AR)
+                <span className="w-3 h-3 rounded-full bg-amber-500 ring-4 ring-amber-100" />
+                <h4 className="text-sm sm:text-base font-black text-slate-900">
+                  Bank Account & ABPS Details (Col AO - Col AR)
                 </h4>
               </div>
-              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+              <span className="text-[11px] font-black text-amber-800 bg-amber-100/70 px-3 py-1 rounded-full border border-amber-300">
                 RBI & WB Master Verified
               </span>
             </div>
 
             {mergerNotice && (
-              <div className="mb-4 flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+              <div className="mb-4 flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 text-xs shadow-xs">
                 <Zap className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="font-medium leading-relaxed">
-                  <span className="font-bold">RBI Bank Merger / Code Resolution:</span> {mergerNotice}
+                <div className="font-semibold leading-relaxed">
+                  <span className="font-black text-amber-900">RBI Bank Merger / Code Resolution:</span> {mergerNotice}
                 </div>
               </div>
             )}
@@ -1191,17 +1244,17 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
               type="submit"
               disabled={isSaving}
               id="saveData3dBtn"
-              className="flex-1 min-w-[170px] py-3.5 px-6 rounded-2xl btn-3d-save text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="flex-1 min-w-[170px] py-3.5 px-6 rounded-2xl btn-3d-save text-white font-black text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-lg hover:shadow-xl transition-all"
             >
               <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
-              <span>{isSaving ? "Saving Data..." : "Save Data"}</span>
+              <span>{isSaving ? "Saving to Database..." : "Save Record"}</span>
             </button>
 
             <button
               type="button"
               id="printSlip3dBtn"
               onClick={() => onPrintSlip({ ...activeRow, ...formData } as BeneficiaryRow)}
-              className="py-3.5 px-6 rounded-2xl btn-3d-slip text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg transition-all"
+              className="py-3.5 px-6 rounded-2xl btn-3d-slip text-white font-black text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg transition-all"
               title="Print Citizen Acknowledgement Slip"
             >
               <Printer className="w-4 h-4" />
@@ -1212,11 +1265,40 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
               type="button"
               id="jobCardPrint3dBtn"
               onClick={() => onPrintA5Slip({ ...activeRow, ...formData } as BeneficiaryRow)}
-              className="py-3.5 px-6 rounded-2xl btn-3d-jobcard text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg transition-all"
+              className="py-3.5 px-6 rounded-2xl btn-3d-jobcard text-white font-black text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg transition-all"
               title="Official Job Card & Family e-KYC Print (Enhanced A5 Certificate)"
             >
               <FileCheck className="w-4 h-4" />
               <span>Job Card Print</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (activeRow) {
+                  setFormData({
+                    colP: activeRow.colP || '',
+                    colQ: activeRow.colQ || '',
+                    colR: activeRow.colR || '',
+                    colS: activeRow.colS || '',
+                    colT: activeRow.colT || '',
+                    colU: activeRow.colU || '',
+                    colV: activeRow.colV || '',
+                    colW: activeRow.colW || '',
+                    colX: activeRow.colX || '',
+                    colAO: activeRow.colAO || '',
+                    colAP: activeRow.colAP || '',
+                    colAQ: activeRow.colAQ || '',
+                    colAR: activeRow.colAR || '',
+                    colAR_confirm: activeRow.colAR || '',
+                  });
+                }
+              }}
+              className="py-3.5 px-5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-sm border-2 border-slate-300 flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
+              title="Revert form to saved values"
+            >
+              <RotateCcw className="w-4 h-4 text-slate-500" />
+              <span>Reset</span>
             </button>
           </div>
         </form>

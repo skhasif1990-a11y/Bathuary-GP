@@ -280,30 +280,39 @@ export const DashboardAnalytics: React.FC<DashboardProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[480px] overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[500px] overflow-y-auto pr-1">
           {villageStats.map(vs => {
             const vDonePct = vs.total ? Math.round((vs.done / vs.total) * 100) : 0;
             return (
               <div 
                 key={vs.village} 
-                className="p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-slate-50/80 transition-all shadow-xs"
+                className="p-4 rounded-2xl bg-white border-2 border-slate-200 hover:border-emerald-500 hover:shadow-md transition-all duration-200 hover-lift relative overflow-hidden group"
               >
+                <div className="h-1 w-full bg-gradient-to-r from-emerald-500 to-teal-500 absolute top-0 left-0" />
                 <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-800 text-xs sm:text-sm truncate max-w-[170px] uppercase">
+                  <h4 className="font-black text-slate-900 text-xs sm:text-sm truncate max-w-[170px] uppercase group-hover:text-emerald-700 transition-colors">
                     {vs.village}
                   </h4>
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    {vs.total} Holders
+                  <span className="text-xs font-black text-emerald-900 bg-emerald-100/80 px-2.5 py-0.5 rounded-full border border-emerald-300 shadow-2xs">
+                    {vs.total} Cards
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 font-medium">
-                  <span className="text-emerald-700 font-bold">✓ {vs.done} ({vDonePct}%)</span>
-                  <span className="text-amber-600 font-bold">⏳ {vs.pending}</span>
-                  {vs.death > 0 && <span className="text-rose-600 font-bold">✕ {vs.death}</span>}
+                <div className="flex items-center justify-between text-[11px] mt-2.5 font-bold">
+                  <span className="text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Done: {vs.done} ({vDonePct}%)
+                  </span>
+                  <span className="text-amber-950 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                    Pending: {vs.pending}
+                  </span>
+                  {vs.death > 0 && (
+                    <span className="text-rose-950 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                      Inactive: {vs.death}
+                    </span>
+                  )}
                 </div>
-                <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2.5 overflow-hidden">
+                <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
                   <div 
-                    className="bg-emerald-600 h-full rounded-full transition-all"
+                    className="bg-gradient-to-r from-emerald-500 to-teal-600 h-full rounded-full transition-all duration-500"
                     style={{ width: `${vDonePct}%` }}
                   />
                 </div>

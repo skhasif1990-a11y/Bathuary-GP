@@ -53,49 +53,99 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Portal Home',
       sublabel: 'Govt. Notice & Services',
       icon: Home,
-      badge: 'Official'
+      badge: 'Official',
+      activeGradient: 'from-emerald-600 to-teal-600 border-emerald-400/50 shadow-emerald-950/60',
+      iconColor: 'text-emerald-400',
+      activeIconBg: 'bg-emerald-700/90 text-white',
+      badgeColor: 'bg-emerald-500/30 text-emerald-200 border-emerald-400/40'
     },
     {
       id: 'dashboard',
       label: 'Analytics Dashboard',
       sublabel: 'Overview & 29 Villages',
       icon: BarChart3,
-      badge: 'Live'
+      badge: 'Live',
+      activeGradient: 'from-amber-600 to-orange-600 border-amber-400/50 shadow-amber-950/60',
+      iconColor: 'text-amber-400',
+      activeIconBg: 'bg-amber-700/90 text-white',
+      badgeColor: 'bg-amber-500/30 text-amber-200 border-amber-400/40'
     },
     {
       id: 'search',
       label: 'Citizen Search Corner',
       sublabel: 'Job Card & Aadhaar Search',
       icon: Search,
-      badge: null
+      badge: 'Search',
+      activeGradient: 'from-blue-600 to-indigo-600 border-blue-400/50 shadow-blue-950/60',
+      iconColor: 'text-blue-400',
+      activeIconBg: 'bg-blue-700/90 text-white',
+      badgeColor: 'bg-blue-500/30 text-blue-200 border-blue-400/40'
     },
     {
       id: 'dataForm',
       label: 'Data Update Form',
       sublabel: 'Field Officer e-KYC Entry',
       icon: UserCheck,
-      badge: null
+      badge: 'e-KYC',
+      activeGradient: 'from-teal-600 to-emerald-600 border-teal-400/50 shadow-teal-950/60',
+      iconColor: 'text-teal-400',
+      activeIconBg: 'bg-teal-700/90 text-white',
+      badgeColor: 'bg-teal-500/30 text-teal-200 border-teal-400/40'
     },
     {
       id: 'reports',
       label: 'Village Report & PDF',
       sublabel: 'Official PDF Slips & Lists',
       icon: FileText,
-      badge: 'Job Card'
+      badge: 'A4 Print',
+      activeGradient: 'from-indigo-600 to-purple-600 border-indigo-400/50 shadow-indigo-950/60',
+      iconColor: 'text-indigo-400',
+      activeIconBg: 'bg-indigo-700/90 text-white',
+      badgeColor: 'bg-indigo-500/30 text-indigo-200 border-indigo-400/40'
+    },
+    {
+      id: 'ai',
+      label: 'AI Verifier Assistant',
+      sublabel: 'Audit & Eligibility Check',
+      icon: Sparkles,
+      badge: 'AI Smart',
+      activeGradient: 'from-fuchsia-600 to-pink-600 border-fuchsia-400/50 shadow-fuchsia-950/60',
+      iconColor: 'text-fuchsia-400',
+      activeIconBg: 'bg-fuchsia-700/90 text-white',
+      badgeColor: 'bg-fuchsia-500/30 text-fuchsia-200 border-fuchsia-400/40'
+    },
+    {
+      id: 'users',
+      label: 'Staff Management',
+      sublabel: 'Authorized Field Operators',
+      icon: Users,
+      badge: 'RBAC',
+      activeGradient: 'from-sky-600 to-blue-600 border-sky-400/50 shadow-sky-950/60',
+      iconColor: 'text-sky-400',
+      activeIconBg: 'bg-sky-700/90 text-white',
+      badgeColor: 'bg-sky-500/30 text-sky-200 border-sky-400/40'
     },
     {
       id: 'deploy',
       label: 'Deployment Guide',
       sublabel: 'Production & Server Hosting',
       icon: Rocket,
-      badge: null
+      badge: 'Setup',
+      activeGradient: 'from-rose-600 to-orange-600 border-rose-400/50 shadow-rose-950/60',
+      iconColor: 'text-rose-400',
+      activeIconBg: 'bg-rose-700/90 text-white',
+      badgeColor: 'bg-rose-500/30 text-rose-200 border-rose-400/40'
     },
     {
       id: 'security',
       label: 'Security & Privacy',
       sublabel: 'Aadhaar & Data Protection',
       icon: ShieldCheck,
-      badge: 'ISO'
+      badge: 'ISO',
+      activeGradient: 'from-slate-700 to-purple-800 border-purple-400/50 shadow-purple-950/60',
+      iconColor: 'text-purple-400',
+      activeIconBg: 'bg-purple-700/90 text-white',
+      badgeColor: 'bg-purple-500/30 text-purple-200 border-purple-400/40'
     }
   ];
 
@@ -176,29 +226,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   setCurrentTab(item.id);
                   if (window.innerWidth < 1024) onClose();
                 }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all duration-200 cursor-pointer group ${
                   isActive
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow-lg shadow-emerald-950/60 border border-emerald-400/40'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 border border-transparent'
+                    ? `bg-gradient-to-r ${item.activeGradient} text-white font-bold shadow-lg border`
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`p-1.5 rounded-lg ${isActive ? 'bg-emerald-700/80 text-white' : 'bg-slate-800/90 text-emerald-400'}`}>
+                  <div className={`p-1.5 rounded-lg transition-transform group-hover:scale-110 ${isActive ? item.activeIconBg : `bg-slate-800/90 ${item.iconColor}`}`}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <div>
                     <span className="block text-xs font-bold leading-tight">
                       {item.label}
                     </span>
-                    <span className={`block text-[10px] ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>
+                    <span className={`block text-[10px] ${isActive ? 'text-white/90 font-medium' : 'text-slate-400'}`}>
                       {item.sublabel}
                     </span>
                   </div>
                 </div>
 
                 {item.badge && (
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                    isActive ? 'bg-emerald-800/80 text-emerald-100 border border-emerald-400/30' : 'bg-slate-800 text-slate-400'
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                    isActive 
+                      ? 'bg-white/20 text-white border border-white/30 backdrop-blur-xs' 
+                      : `${item.badgeColor} border`
                   }`}>
                     {item.badge}
                   </span>

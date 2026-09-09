@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
   Printer, 
@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   Clock,
   UserX,
-  Users
+  Users,
+  Loader2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { BeneficiaryRow } from '../types';
@@ -46,6 +47,23 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
   const [pageSize, setPageSize] = useState<number>(50);
   const [printScope, setPrintScope] = useState<'PAGE' | 'ALL'>('PAGE');
   const [printOrientation, setPrintOrientation] = useState<'PORTRAIT' | 'LANDSCAPE'>('LANDSCAPE');
+  const [isPrinting, setIsPrinting] = useState<boolean>(false);
+  const [isPreparingPrint, setIsPreparingPrint] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforePrint = () => setIsPrinting(true);
+    const handleAfterPrint = () => {
+      setIsPrinting(false);
+      setIsPreparingPrint(false);
+    };
+
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, []);
 
   // Fast memoized filtering for thousands of rows
   const filteredRows = useMemo(() => {
@@ -111,24 +129,32 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
   };
 
   const handlePrint = () => {
-    const originalTitle = document.title;
-    const orientationStyle = document.createElement('style');
-    orientationStyle.id = 'print-orientation-override';
-    orientationStyle.innerHTML = `@page { size: A4 ${printOrientation.toLowerCase()}; margin: 8mm 8mm 10mm 8mm; }`;
-    document.head.appendChild(orientationStyle);
+    setIsPreparingPrint(true);
+    setIsPrinting(true);
 
-    try {
-      document.title = `Bathuary_GP_Report_${selectedSansad || selectedVillage || 'All'}_${selectedCategory}`;
-      window.print();
-    } catch (err) {
-      console.warn('Print blocked or unavailable:', err);
-    } finally {
-      setTimeout(() => {
-        document.title = originalTitle;
-        const el = document.getElementById('print-orientation-override');
-        if (el) el.remove();
-      }, 1000);
-    }
+    // Give browser 50ms to mount print DOM before triggering window.print()
+    setTimeout(() => {
+      const originalTitle = document.title;
+      const orientationStyle = document.createElement('style');
+      orientationStyle.id = 'print-orientation-override';
+      orientationStyle.innerHTML = `@page { size: A4 ${printOrientation.toLowerCase()}; margin: 8mm 8mm 10mm 8mm; }`;
+      document.head.appendChild(orientationStyle);
+
+      try {
+        document.title = `Bathuary_GP_Report_${selectedSansad || selectedVillage || 'All'}_${selectedCategory}`;
+        window.print();
+      } catch (err) {
+        console.warn('Print blocked or unavailable:', err);
+      } finally {
+        setTimeout(() => {
+          document.title = originalTitle;
+          const el = document.getElementById('print-orientation-override');
+          if (el) el.remove();
+          setIsPrinting(false);
+          setIsPreparingPrint(false);
+        }, 800);
+      }
+    }, 60);
   };
 
   const handleExportExcel = () => {
@@ -218,10 +244,15 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-xl shadow-md hover:shadow-lg flex items-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5"
+              disabled={isPreparingPrint}
+              className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-xl shadow-md hover:shadow-lg flex items-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5 disabled:opacity-75"
             >
-              <Printer className="w-4 h-4" />
-              <span>Print A4 Report</span>
+              {isPreparingPrint ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <Printer className="w-4 h-4" />
+              )}
+              <span>{isPreparingPrint ? 'Preparing PDF...' : 'Print A4 Report'}</span>
             </button>
           </div>
         </div>
@@ -611,33 +642,35 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
               )}
             </tbody>
 
-            {/* PRINT VIEW TBODY: Only visible during @media print */}
-            <tbody className="hidden print:table-row-group divide-y divide-slate-400 text-[8pt] print:text-black">
-              {rowsToPrint.map((row, idx) => {
-                const absoluteIndex = printScope === 'ALL' ? idx + 1 : ((currentPage - 1) * pageSize + idx + 1);
-                const isDone = (row.colR || '').toUpperCase() === 'YES' || (row.colR || '').toUpperCase() === 'Y';
-                const isDead = (row.colT || '').toLowerCase().includes('death') || (row.colT || '').toLowerCase().includes('expired');
+            {/* PRINT VIEW TBODY: Only mounted when user triggers print to guarantee instant tab switching */}
+            {isPrinting && (
+              <tbody className="hidden print:table-row-group divide-y divide-slate-400 text-[8pt] print:text-black">
+                {rowsToPrint.map((row, idx) => {
+                  const absoluteIndex = printScope === 'ALL' ? idx + 1 : ((currentPage - 1) * pageSize + idx + 1);
+                  const isDone = (row.colR || '').toUpperCase() === 'YES' || (row.colR || '').toUpperCase() === 'Y';
+                  const isDead = (row.colT || '').toLowerCase().includes('death') || (row.colT || '').toLowerCase().includes('expired');
 
-                return (
-                  <tr key={`print-${row.colH}-${idx}`} className="print:bg-transparent print:break-inside-avoid">
-                    <td className="p-1.5 text-center font-bold text-black border-r border-slate-300">{absoluteIndex}</td>
-                    <td className="p-1.5 font-bold text-black border-r border-slate-300 whitespace-nowrap">{row.colB}</td>
-                    <td className="p-1.5 font-mono font-bold text-black border-r border-slate-300 whitespace-nowrap">{row.colH}</td>
-                    <td className="p-1.5 font-bold text-black uppercase border-r border-slate-300">{row.colJ}</td>
-                    <td className="p-1.5 text-black uppercase border-r border-slate-300">{row.colAG || "—"}</td>
-                    <td className="p-1.5 text-black font-bold border-r border-slate-300 whitespace-nowrap">{row.colV}</td>
-                    <td className="p-1.5 font-mono text-black border-r border-slate-300 whitespace-nowrap">
-                      {row.colP ? `•••• ${row.colP.slice(-4)}` : "—"}
-                    </td>
-                    <td className="p-1.5 text-center border-r border-slate-300 whitespace-nowrap">
-                      <span className="inline-block px-1.5 py-0.5 border border-black font-bold uppercase text-[7pt]">
-                        {isDone ? "Done" : isDead ? "Expired" : "Pending"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
+                  return (
+                    <tr key={`print-${row.colH}-${idx}`} className="print:bg-transparent print:break-inside-avoid">
+                      <td className="p-1.5 text-center font-bold text-black border-r border-slate-300">{absoluteIndex}</td>
+                      <td className="p-1.5 font-bold text-black border-r border-slate-300 whitespace-nowrap">{row.colB}</td>
+                      <td className="p-1.5 font-mono font-bold text-black border-r border-slate-300 whitespace-nowrap">{row.colH}</td>
+                      <td className="p-1.5 font-bold text-black uppercase border-r border-slate-300">{row.colJ}</td>
+                      <td className="p-1.5 text-black uppercase border-r border-slate-300">{row.colAG || "—"}</td>
+                      <td className="p-1.5 text-black font-bold border-r border-slate-300 whitespace-nowrap">{row.colV}</td>
+                      <td className="p-1.5 font-mono text-black border-r border-slate-300 whitespace-nowrap">
+                        {row.colP ? `•••• ${row.colP.slice(-4)}` : "—"}
+                      </td>
+                      <td className="p-1.5 text-center border-r border-slate-300 whitespace-nowrap">
+                        <span className="inline-block px-1.5 py-0.5 border border-black font-bold uppercase text-[7pt]">
+                          {isDone ? "Done" : isDead ? "Expired" : "Pending"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            )}
           </table>
         </div>
 

@@ -9,6 +9,7 @@ import {
   CreditCard, 
   User, 
   IdCard, 
+  Phone,
   HelpCircle,
   Search,
   X,
@@ -114,13 +115,32 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
       .slice(0, 25);
   }, [beneficiaries, jobCardSearch]);
 
-  // Live filtered suggestions for Aadhaar Number Search
+  // Live filtered suggestions for Aadhaar & Mobile Number Search
   const filteredAadhaarRecords = useMemo(() => {
-    const q = aadhaarSearch.trim().replace(/\D/g, '');
-    if (!q) return [];
+    const raw = aadhaarSearch.trim();
+    if (!raw) return [];
+    const digitsOnly = raw.replace(/\D/g, '');
+    const lower = raw.toLowerCase();
+
     return beneficiaries
-      .filter(b => b.colP && b.colP.replace(/\D/g, '').includes(q))
-      .slice(0, 25);
+      .filter(b => {
+        // Match 12-digit or partial Aadhaar
+        const aadhaarDigits = (b.colP || '').replace(/\D/g, '');
+        if (digitsOnly && aadhaarDigits.includes(digitsOnly)) return true;
+
+        // Match 10-digit or partial Mobile Phone
+        const phoneDigits = (b.colQ || '').replace(/\D/g, '');
+        if (digitsOnly && phoneDigits.includes(digitsOnly)) return true;
+
+        // Match Applicant Name
+        if (b.colJ && b.colJ.toLowerCase().includes(lower)) return true;
+
+        // Match Job Card
+        if (b.colH && b.colH.toLowerCase().includes(lower)) return true;
+
+        return false;
+      })
+      .slice(0, 35);
   }, [beneficiaries, aadhaarSearch]);
 
   // Standard RBI 4-letter IFSC Bank Map for instant auto-resolution (includes merged entities)
@@ -296,12 +316,13 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
   };
 
   const handleSelectAadhaarMatch = (b: BeneficiaryRow) => {
-    setSelectedAadhaar(b.colP);
-    setAadhaarSearch(b.colP);
+    setSelectedAadhaar(b.colP || '');
+    setAadhaarSearch(b.colP || b.colQ || b.colH);
     setIsAadhaarOpen(false);
     setSelectedJobCard(b.colH);
     setJobCardSearch(b.colH);
     setSelectedApplicant(b.colJ);
+    setActiveRow(b);
   };
 
   const handleAadhaarInputChange = (val: string) => {
@@ -309,13 +330,23 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
     setIsAadhaarOpen(true);
     const clean = val.replace(/\D/g, '');
     setSelectedAadhaar(clean);
+    
+    // Auto-fill active row if exact match is found, but keep dropdown visible so results are never hidden
     if (clean.length === 12) {
-      const match = beneficiaries.find(b => b.colP === clean);
+      const match = beneficiaries.find(b => (b.colP || '').replace(/\D/g, '') === clean);
       if (match) {
         setSelectedJobCard(match.colH);
         setJobCardSearch(match.colH);
         setSelectedApplicant(match.colJ);
-        setIsAadhaarOpen(false);
+        setActiveRow(match);
+      }
+    } else if (clean.length === 10) {
+      const match = beneficiaries.find(b => (b.colQ || '').replace(/\D/g, '') === clean);
+      if (match) {
+        setSelectedJobCard(match.colH);
+        setJobCardSearch(match.colH);
+        setSelectedApplicant(match.colJ);
+        setActiveRow(match);
       }
     }
   };
@@ -546,8 +577,8 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Search & Select Controls with Colorful Gradient Border */}
-      <div className="rounded-3xl bg-gradient-to-br from-white via-slate-50 to-emerald-50/20 border-2 border-slate-200 p-6 sm:p-8 shadow-sm relative overflow-hidden">
-        <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500 absolute top-0 left-0" />
+      <div className="rounded-3xl bg-gradient-to-br from-white via-slate-50 to-emerald-50/20 border-2 border-slate-200 p-6 sm:p-8 shadow-sm relative overflow-visible">
+        <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500 absolute top-0 left-0 rounded-t-3xl" />
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-200/80 pb-4">
           <div className="flex items-center gap-3.5">
@@ -564,7 +595,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Select Aadhaar, Job Card, or Applicant Name to view and modify beneficiary records with live sync.
+                Search Aadhaar UID or Mobile Number, or select Job Card to load and update records with live Google Sheet sync.
               </p>
             </div>
           </div>
@@ -585,12 +616,13 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Aadhaar Fast Search & Combobox */}
-          <div ref={aadhaarDropdownRef} className="relative bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+          {/* Aadhaar & Mobile Fast Search & Combobox */}
+          <div ref={aadhaarDropdownRef} className="relative bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs z-30">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                 <IdCard className="w-4 h-4 text-emerald-600" />
-                <span>Aadhaar Number (Col P):</span>
+                <Phone className="w-3.5 h-3.5 text-blue-600" />
+                <span>Aadhaar / Mobile (Col P & Q):</span>
               </label>
               {aadhaarSearch && (
                 <button
@@ -612,7 +644,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
               </div>
               <input
                 type="text"
-                placeholder="Search by 4 or 12 digit Aadhaar..."
+                placeholder="Search 12-digit Aadhaar, Mobile, or Name..."
                 value={aadhaarSearch}
                 onFocus={() => setIsAadhaarOpen(true)}
                 onChange={(e) => handleAadhaarInputChange(e.target.value)}
@@ -621,50 +653,77 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAadhaarOpen(!isAadhaarOpen)}
-                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <ChevronDown className={`w-4 h-4 transition-transform ${isAadhaarOpen ? 'rotate-180' : ''}`} />
               </button>
             </div>
 
-            {/* Aadhaar Live Search Dropdown */}
+            {/* Aadhaar & Mobile Live Search Dropdown */}
             {isAadhaarOpen && (
-              <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-2xl border-2 border-emerald-500 shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+              <div 
+                onMouseDown={(e) => e.stopPropagation()}
+                className="absolute z-[100] left-0 right-0 mt-2 bg-white rounded-2xl border-2 border-emerald-500 shadow-2xl max-h-80 overflow-y-auto divide-y divide-slate-100"
+              >
                 {filteredAadhaarRecords.length > 0 ? (
                   <>
-                    <div className="px-3 py-1.5 bg-emerald-50 text-[11px] font-bold text-emerald-800 flex justify-between items-center">
-                      <span>Found {filteredAadhaarRecords.length} match(es)</span>
-                      <span>Click to select</span>
+                    <div className="px-3.5 py-2 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 text-[11px] font-bold text-emerald-950 flex justify-between items-center sticky top-0 z-10 border-b border-emerald-200/80">
+                      <span>Found {filteredAadhaarRecords.length} citizen match(es)</span>
+                      <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-black">
+                        Click to load
+                      </span>
                     </div>
                     {filteredAadhaarRecords.map((item, idx) => (
                       <button
                         key={`${item.colH}-${item.colJ}-${idx}`}
                         type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleSelectAadhaarMatch(item);
+                        }}
                         onClick={() => handleSelectAadhaarMatch(item)}
-                        className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/70 transition-colors flex items-center justify-between group cursor-pointer"
+                        className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/80 transition-colors flex items-center justify-between group cursor-pointer"
                       >
-                        <div>
-                          <div className="font-mono font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
-                            <span className="text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded text-[11px]">
-                              {item.colP}
+                        <div className="space-y-1 pr-2">
+                          <div className="font-sans font-black text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                            <span>{item.colJ}</span>
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                              JC: {item.colH}
                             </span>
-                            <span className="font-sans font-bold text-slate-800">{item.colJ}</span>
+                            {item.colR === 'Yes' || item.colR === 'Y' ? (
+                              <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full">
+                                e-KYC Done
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-full">
+                                Pending
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5 flex gap-2">
-                            <span>JC: {item.colH}</span>
-                            <span>• {item.colV}</span>
-                            <span>• {item.colB}</span>
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className="font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                              🆔 {item.colP ? item.colP : 'No Aadhaar'}
+                            </span>
+                            <span className="font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                              📱 {item.colQ ? item.colQ : 'No Mobile'}
+                            </span>
+                            <span className="text-slate-500 font-medium">
+                              • {item.colV} • {item.colB}
+                            </span>
                           </div>
                         </div>
-                        <span className="text-xs font-bold text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-xs font-bold text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                           Select →
                         </span>
                       </button>
                     ))}
                   </>
                 ) : (
-                  <div className="px-4 py-3 text-xs text-slate-500 text-center">
-                    {aadhaarSearch.trim() ? "No matching Aadhaar found. Type digits to search." : "Type digits to search Aadhaar numbers"}
+                  <div className="px-4 py-4 text-xs text-slate-500 text-center">
+                    {aadhaarSearch.trim() 
+                      ? `No citizen found matching "${aadhaarSearch}". Try searching other digits or name.` 
+                      : "Type Aadhaar digits, Mobile number, or Name to search"}
                   </div>
                 )}
               </div>
@@ -672,7 +731,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           </div>
 
           {/* Job Card Fast Search & Combobox */}
-          <div ref={jobCardDropdownRef} className="relative bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+          <div ref={jobCardDropdownRef} className="relative bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs z-20">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                 <CreditCard className="w-4 h-4 text-indigo-600" />
@@ -699,7 +758,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
               </div>
               <input
                 type="text"
-                placeholder="Search Job Card or Name..."
+                placeholder="Search Job Card, Name, or Sansad..."
                 value={jobCardSearch}
                 onFocus={() => setIsJobCardOpen(true)}
                 onChange={(e) => handleJobCardInputChange(e.target.value)}
@@ -708,7 +767,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
               <button
                 type="button"
                 onClick={() => setIsJobCardOpen(!isJobCardOpen)}
-                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <ChevronDown className={`w-4 h-4 transition-transform ${isJobCardOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -716,41 +775,52 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
 
             {/* Job Card Live Search Dropdown */}
             {isJobCardOpen && (
-              <div className="absolute z-50 left-0 right-0 mt-2 bg-white rounded-2xl border-2 border-indigo-500 shadow-2xl max-h-60 overflow-y-auto divide-y divide-slate-100">
+              <div 
+                onMouseDown={(e) => e.stopPropagation()}
+                className="absolute z-[100] left-0 right-0 mt-2 bg-white rounded-2xl border-2 border-indigo-500 shadow-2xl max-h-80 overflow-y-auto divide-y divide-slate-100"
+              >
                 {filteredJobCards.length > 0 ? (
                   <>
-                    <div className="px-3 py-1.5 bg-indigo-50 text-[11px] font-bold text-indigo-800 flex justify-between items-center">
+                    <div className="px-3.5 py-2 bg-indigo-50 text-[11px] font-bold text-indigo-900 flex justify-between items-center sticky top-0 z-10 border-b border-indigo-200/80">
                       <span>Found {filteredJobCards.length} match(es)</span>
-                      <span>Click to select</span>
+                      <span className="text-[10px] text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full font-black">
+                        Click to select
+                      </span>
                     </div>
                     {filteredJobCards.map((b, idx) => (
                       <button
                         key={`${b.colH}-${b.colJ}-${idx}`}
                         type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleSelectJobCardMatch(b.colH, b.colJ);
+                        }}
                         onClick={() => handleSelectJobCardMatch(b.colH, b.colJ)}
-                        className="w-full text-left px-3.5 py-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between group cursor-pointer"
+                        className="w-full text-left px-3.5 py-2.5 hover:bg-indigo-50/80 transition-colors flex items-center justify-between group cursor-pointer"
                       >
-                        <div>
+                        <div className="space-y-0.5 pr-2">
                           <div className="font-mono font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
-                            <span className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[11px]">
+                            <span className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[11px] font-mono border border-indigo-200">
                               {b.colH}
                             </span>
                             <span className="font-sans font-bold text-slate-800">{b.colJ}</span>
                           </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5 flex gap-2">
-                            <span>Aadhaar: {b.colP ? `•••• ${b.colP.slice(-4)}` : 'Not linked'}</span>
+                          <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap gap-2">
+                            <span>🆔 Aadhaar: {b.colP ? `•••• ${b.colP.slice(-4)}` : 'Not linked'}</span>
+                            <span>📱 {b.colQ ? b.colQ : 'No phone'}</span>
                             <span>• {b.colV}</span>
                             <span>• {b.colB}</span>
                           </div>
                         </div>
-                        <span className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                           Select →
                         </span>
                       </button>
                     ))}
                   </>
                 ) : (
-                  <div className="px-4 py-3 text-xs text-slate-500 text-center">
+                  <div className="px-4 py-4 text-xs text-slate-500 text-center">
                     {jobCardSearch.trim() ? "No matching Job Card found." : "Type to search by Job Card, Name, or Sansad"}
                   </div>
                 )}

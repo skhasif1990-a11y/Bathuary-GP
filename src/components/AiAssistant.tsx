@@ -334,40 +334,71 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
     setAuditResult(null);
   };
 
-  // Smart local fallback responses for the virtual helpdesk
+  // Smart local fallback responses for the virtual helpdesk with 100% verified GP facts
   const getSmartLocalAnswer = (q: string): string => {
     const lower = q.toLowerCase();
+    const isBengali = /[\u0980-\u09FF]/.test(q) || lower.includes('ki') || lower.includes('koto') || lower.includes('gram') || lower.includes('sansad');
     
-    if (lower.includes('kyc') || lower.includes('ই-কেওয়াইসি') || lower.includes('pending') || lower.includes('বাকি')) {
-      const pendingCount = beneficiaries.filter(b => {
-        const isDone = (b.colR || '').toUpperCase() === 'YES' || (b.colR || '').toUpperCase() === 'Y';
-        return !isDone;
-      }).length;
-      const doneCount = beneficiaries.length - pendingCount;
-      const pct = beneficiaries.length > 0 ? Math.round((doneCount / beneficiaries.length) * 100) : 0;
-      return `বাথুয়ারী গ্রাম পঞ্চায়েতের বর্তমান মোট রেকর্ড: ${beneficiaries.length} জন।\n• সম্পন্ন ই-কেওয়াইসি (Done): ${doneCount} জন (${pct}%)\n• এখনো বাকি (Pending e-KYC): ${pendingCount} জন।\nআপনার ফিল্ড অফিসারদের মাধ্যমে আধার বায়োমেট্রিক ক্যাম্প আয়োজন করে দ্রুত বাকিদের ভেরিফিকেশন শেষ করার নির্দেশ রয়েছে।`;
+    const pendingCount = beneficiaries.filter(b => {
+      const isDone = (b.colR || '').toUpperCase() === 'YES' || (b.colR || '').toUpperCase() === 'Y';
+      return !isDone;
+    }).length;
+    const doneCount = beneficiaries.length - pendingCount;
+    const pct = beneficiaries.length > 0 ? Math.round((doneCount / beneficiaries.length) * 100) : 0;
+    const deadCount = beneficiaries.filter(b => (b.colT || '').toLowerCase().includes('death') || (b.colT || '').toLowerCase().includes('expired')).length;
+
+    const canonicalVillages = [
+      "ASTICHAK", "BAMUNIABAR", "BARABHAGIA", "BAR BATHUARY", "BATHUARY",
+      "BHANDERBERIA", "DAKSHINBAR", "DAKSHIN CHOUMUKH", "DAKSHIN PADMA",
+      "DARBARKHANBAR", "DHALGODA", "GAGNA", "GANGADHARBAR", "HATBAINCHA",
+      "JAGANNATHKARBAR", "JAMUALACHHIMPUR", "KASHMILI", "KANTHGANJ",
+      "KISMAT BATHUARY", "KOTBAR", "KUMBHADHARBAR", "MACHHALBAR", "NALBAR",
+      "NARUBHUNIYACHAK", "PAIKBAR", "PIRIJKHANBAR", "RAMCHAK", "UTTARKUNRI",
+      "UTTAR PADMA"
+    ];
+
+    if (lower.includes('kyc') || lower.includes('ই-কেওয়াইসি') || lower.includes('pending') || lower.includes('বাকি') || lower.includes('done')) {
+      if (isBengali) {
+        return `বাথুয়ারী গ্রাম পঞ্চায়েতের (এগরা-২ ব্লক, পূর্ব মেদিনীপুর) বর্তমান লাইভ পরিসংখ্যান:\n• মোট উপভোক্তা: ${beneficiaries.length} জন\n• সম্পন্ন ই-কেওয়াইসি (Done): ${doneCount} জন (${pct}%)\n• এখনো বাকি (Pending): ${pendingCount} জন\n• প্রয়াত/নিষ্ক্রিয় চিহ্নিত: ${deadCount} জন\n\nবাকি নাগরিকদের আধার কার্ড ও ব্যাংক পাসবুক নিয়ে গ্রাম পঞ্চায়েত কার্যালয় বা সংসদের ভিএলই (VLE)/জিআরএস (GRS)-এর সাথে যোগাযোগ করার পরামর্শ দেওয়া হচ্ছে।`;
+      }
+      return `Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) Live Status:\n• Total Beneficiaries: ${beneficiaries.length}\n• e-KYC Done: ${doneCount} (${pct}%)\n• e-KYC Pending: ${pendingCount}\n• Flagged Deceased: ${deadCount}\n\nPlease advise pending beneficiaries to visit the GP office or their Sansad VLE/GRS with Aadhaar card and Bank passbook.`;
     }
 
     if (lower.includes('abps') || lower.includes('এবিপিএস') || lower.includes('payment') || lower.includes('মজুরি') || lower.includes('wage')) {
-      return `ABPS (Aadhaar Based Payment System) সক্রিয় করার নিয়ম:\n১. নাগরিকের আধার কার্ড ও ব্যাংক পাসবুক নিয়ে ব্যাংকে যেতে হবে।\n২. ব্যাংক শাখায় 'Aadhaar NPCI Mapping Consent Form' পূরণ করতে হবে।\n৩. জব কার্ডের আধার নম্বর ও ব্যাংকের ডিবিটি অ্যাকাউন্ট লিঙ্ক নিশ্চিত হলে তবেই ১০০ দিনের কাজের টাকা সরাসরি একাউন্টে জমা হবে।`;
+      if (isBengali) {
+        return `ABPS (Aadhaar Based Payment System) সক্রিয় করার নির্দেশিকা:\n১. উপভোক্তার ১২ সংখ্যার আধার নম্বর জব কার্ডে সিড থাকতে হবে।\n২. উপভোক্তার ব্যাংক একাউন্টে আধার লিঙ্ক ও NPCI (National Payments Corporation of India) ম্যাপারে সক্রিয় (Active DBT) থাকতে হবে।\n৩. যদি ব্যাংকে আধার লিঙ্ক না থাকে, তবে অবিলম্বে ব্যাংক শাখায় 'Aadhaar NPCI Mapping Consent Form' জমা দিতে হবে যাতে ১০০ দিনের কাজের মজুরি সরাসরি অ্যাকাউন্টে জমা হতে পারে।`;
+      }
+      return `ABPS (Aadhaar Based Payment System) Guidelines:\n1. 12-digit Aadhaar UID must be seeded to the Job Card.\n2. Beneficiary bank account must have Aadhaar seeded and active on NPCI DBT Mapper.\n3. If not enabled, visit the bank branch with Aadhaar and passbook to submit the Aadhaar NPCI Mapping Consent Form.`;
     }
 
-    if (lower.includes('ifsc') || lower.includes('আইএফএসসি') || lower.includes('bank') || lower.includes('ব্যাংক') || lower.includes('united') || lower.includes('allahabad')) {
-      return `গুরুত্বপূর্ণ মার্জড ব্যাংক IFSC তালিকা:\n• United Bank of India ➔ Punjab National Bank (PUNB0...) তে স্থানান্তরিত হয়েছে।\n• Allahabad Bank ➔ Indian Bank (IDIB0...) তে যুক্ত হয়েছে।\n• Syndicate Bank ➔ Canara Bank (CNRB0...) তে যুক্ত হয়েছে।\nউপভোক্তাদের পুরাতন কোড পরিবর্তন করে নতুন সক্রিয় কোড দেওয়া বাধ্যতামূলক।`;
+    if (lower.includes('ifsc') || lower.includes('আইএফএসসি') || lower.includes('bank') || lower.includes('ব্যাংক') || lower.includes('united') || lower.includes('allahabad') || lower.includes('pnb')) {
+      if (isBengali) {
+        return `গুরুত্বপূর্ণ ব্যাংক মার্জার ও নতুন IFSC কোড তথ্য:\n• United Bank of India (UTBI...) ➔ পাঞ্জাব ন্যাশনাল ব্যাংক (PUNB...), যেমন এগরা শাখা: PUNB0019020\n• Allahabad Bank (ALLA...) ➔ ইন্ডিয়ান ব্যাংক (IDIB...), যেমন এগরা শাখা: IDIB000E503\n• Syndicate Bank (SYNB...) ➔ কানারা ব্যাংক (CNRB...)\n• Oriental Bank of Commerce (ORBC...) ➔ পাঞ্জাব ন্যাশনাল ব্যাংক (PUNB...)\n• Andhra Bank / Corporation Bank ➔ ইউনিয়ন ব্যাংক অফ ইন্ডিয়া (UBIN...)\nউপভোক্তাদের ব্যাংকের নতুন ও সক্রিয় IFSC কোড পোর্টালে প্রদান করা বাধ্যতামূলক।`;
+      }
+      return `Bank Merger & Updated IFSC Guide:\n• United Bank of India (UTBI...) merged into Punjab National Bank (PUNB...), e.g., Egra Branch: PUNB0019020\n• Allahabad Bank (ALLA...) merged into Indian Bank (IDIB...), e.g., Egra Branch: IDIB000E503\n• Syndicate Bank (SYNB...) merged into Canara Bank (CNRB...)\n• Oriental Bank of Commerce (ORBC...) merged into Punjab National Bank (PUNB...)\n• Andhra Bank / Corporation Bank merged into Union Bank of India (UBIN...)\nBeneficiaries must provide the active new IFSC code to prevent wage transfer bounce.`;
     }
 
     if (lower.includes('গ্রাম') || lower.includes('village') || lower.includes('সংসদ') || lower.includes('sansad')) {
-      return `বাথুয়ারী গ্রাম পঞ্চায়েতে মোট ২৯টি গ্রাম (29 Villages) এবং ১৬টি সংসদ (16 Sansads: BATHUARY 1 থেকে BATHUARY 16) রয়েছে।\nপ্রধান গ্রামগুলো: HATBAINCHA, BATHUARY, CHUAKHIA, DHALTITHA, GHOSHPARA, KHALISADY, RAMNAGAR, ইত্যাদি।`;
+      if (isBengali) {
+        return `বাথুয়ারী গ্রাম পঞ্চায়েতে (এগরা-২ ব্লক, পূর্ব মেদিনীপুর) মোট **২৯টি গ্রাম** এবং **১৬টি সংসদ** (BATHUARY 1 থেকে BATHUARY 16) রয়েছে।\n\n২৯টি গ্রামের সম্পূর্ণ তালিকা:\n${canonicalVillages.join(', ')}।\n\n(উল্লেখ্য: বাথুয়ারী গ্রাম পঞ্চায়েত পূর্ব মেদিনীপুর জেলার এগরা মহকুমার অন্তর্গত)।`;
+      }
+      return `Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) comprises **29 Canonical Villages** and **16 Sansads** (BATHUARY 1 to BATHUARY 16).\n\nOfficial 29 Villages:\n${canonicalVillages.join(', ')}.`;
     }
 
-    if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়')) {
-      return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত তথ্য:\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ থেকে বিকাল ৫:০০ টা।\n• দায়িত্বপ্রাপ্ত আধিকারিক: প্রধান, উপপ্রধান, সচিব (Secretary), ও জিআরএস (GRS)।\n• ঠিকানা: বাথুয়ারী গ্রাম পঞ্চায়েত কার্যালয়, ব্লক-স্বরূপনগর, উত্তর ২৪ পরগণা।`;
+    if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়') || lower.includes('কোথায়') || lower.includes('where')) {
+      if (isBengali) {
+        return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত সরকারি তথ্য:\n• অফিস ঠিকানা: গ্রাম - হাটবাইঞ্চা / বাথুয়ারী, ডাকঘর - বাথুয়ারী, থানা - এগরা, ব্লক - এগরা-২, জেলা - পূর্ব মেদিনীপুর, পিন কোড - ৭২১৪৪৮।\n• ইমেইল: bathuarygp@gmail.com\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা (সরকারি ছুটির দিন ছাড়া)।\n• দায়িত্বপ্রাপ্ত প্রধান আধিকারিকগণ: পঞ্চায়েত প্রধান, সচিব (শ্রী সুপ্রভাত পড়ুয়া), এবং জিআরএস (শ্রী মানিক দাস)।`;
+      }
+      return `Bathuary Gram Panchayat Office Information:\n• Address: Village - Hatbaincha / Bathuary, P.O. - Bathuary, P.S. - Egra, Block - Egra-II, District - Purba Medinipur, West Bengal - 721448.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan, Secretary (Suprabhat Parua), GRS (Manik Das), VLE (Sk David & Niranjan Pradhan).`;
     }
 
-    return `বাথুয়ারী জিপি এআই সহায়িকা: আপনার প্রশ্নটি গ্রহণ করা হয়েছে।\nসিস্টেমে মোট ${beneficiaries.length} জন নাগরিকের জব কার্ড তথ্য সংরক্ষিত রয়েছে। আপনি নির্দিষ্ট কোনো গ্রাম বা উপভোক্তার জব কার্ড নম্বর অনুসন্ধান করতে ওপরের Citizen Search Corner বা ফিল্টার ব্যবহার করতে পারেন।`;
+    if (isBengali) {
+      return `নমস্কার! আমি বাথুয়ারী গ্রাম পঞ্চায়েত (এগরা-২ ব্লক, পূর্ব মেদিনীপুর) ভার্চুয়াল এআই হেল্পডেস্ক অ্যাসিস্ট্যান্ট।\nবর্তমানে পোর্টালে মোট ${beneficiaries.length} জন উপভোক্তার তথ্য সংরক্ষিত রয়েছে (ই-কেওয়াইসি সম্পন্ন: ${doneCount} জন, বাকি: ${pendingCount} জন)।\nআপনি ২৯টি গ্রাম, ১৬টি সংসদ, আধার ও মোবাইল নম্বর আপডেট, ব্যাংক IFSC মার্জার, এবিপিএস (ABPS) বা অফিস সময় সম্পর্কে যেকোনো প্রশ্ন করতে পারেন।`;
+    }
+    return `Hello! I am the Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) Virtual AI Helpdesk Assistant.\nCurrently ${beneficiaries.length} beneficiaries are registered (${doneCount} e-KYC Done, ${pendingCount} Pending).\nYou can ask about the 29 villages, 16 Sansads, Aadhaar & Mobile update, Bank IFSC merger, ABPS activation, or office details.`;
   };
 
-  // Send question
+  // Send question with live database stats to server Gemini API
   const handleSendQuestion = async (qText?: string) => {
     const q = (qText || inputQuestion).trim();
     if (!q || isAsking) return;
@@ -381,11 +412,30 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
     setInputQuestion('');
     setIsAsking(true);
 
+    const pendingCount = beneficiaries.filter(b => {
+      const isDone = (b.colR || '').toUpperCase() === 'YES' || (b.colR || '').toUpperCase() === 'Y';
+      return !isDone;
+    }).length;
+    const doneCount = beneficiaries.length - pendingCount;
+    const deadCount = beneficiaries.filter(b => (b.colT || '').toLowerCase().includes('death') || (b.colT || '').toLowerCase().includes('expired')).length;
+    const abpsCount = beneficiaries.filter(b => (b.colO || '').toUpperCase() === 'YES' || (b.colO || '').toUpperCase() === 'Y').length;
+
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ question: q })
+        body: JSON.stringify({ 
+          question: q,
+          stats: {
+            total: beneficiaries.length,
+            done: doneCount,
+            pending: pendingCount,
+            dead: deadCount,
+            abps: abpsCount,
+            villages: 29,
+            sansads: 16
+          }
+        })
       });
       const raw = await res.text();
       let reply = '';

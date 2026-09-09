@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { HomeOverview } from './components/HomeOverview';
 import { DashboardAnalytics } from './components/DashboardAnalytics';
 import { DataUpdateForm } from './components/DataUpdateForm';
 import { CitizenSearchCorner } from './components/CitizenSearchCorner';
 import { VillagePdfReport } from './components/VillagePdfReport';
 import { AiAssistant } from './components/AiAssistant';
-import { UserManagement } from './components/UserManagement';
 import { DeploymentGuide } from './components/DeploymentGuide';
 import { PolicyAndSecurity } from './components/PolicyAndSecurity';
 import { PrintSlipModal } from './components/PrintSlipModal';
@@ -25,8 +23,8 @@ import { NationalEmblemLogo, VbGramGActLogo } from './components/Emblems';
 import { FileSpreadsheet, AlertCircle, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export default function App() {
-  // Navigation
-  const [currentTab, setCurrentTab] = useState<string>('home');
+  // Navigation: Default directly to Dashboard Analytics
+  const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const language = 'en';
 
@@ -438,25 +436,6 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 0: Portal Home Overview */}
-          {currentTab === 'home' && (
-            <HomeOverview
-              analytics={analytics}
-              villageStats={villageStats}
-              onNavigateTab={(tab, extra) => {
-                if (extra?.category) {
-                  setCategoryFilter(extra.category);
-                }
-                if (extra?.sansad) {
-                  setSelectedSansad(extra.sansad);
-                }
-                setCurrentTab(tab);
-              }}
-              onOpenSyncModal={() => setIsSyncModalOpen(true)}
-              language={language}
-            />
-          )}
-
           {/* TAB 1: Dashboard Analytics */}
           {currentTab === 'dashboard' && (
             <DashboardAnalytics
@@ -467,7 +446,6 @@ export default function App() {
               onSansadChange={setSelectedSansad}
               onSelectCategoryReport={handleSelectCategoryReport}
               onOpenSyncModal={() => setIsSyncModalOpen(true)}
-              onNavigateToHome={() => setCurrentTab('home')}
               language={language}
             />
           )}
@@ -519,18 +497,7 @@ export default function App() {
             />
           )}
 
-          {/* TAB 6: Staff Management */}
-          {currentTab === 'users' && (
-            <UserManagement
-              users={users}
-              auditLogs={auditLogs}
-              onAddUser={handleAddUser}
-              onDeleteUser={handleDeleteUser}
-              language={language}
-            />
-          )}
-
-          {/* TAB 7: Deployment Guide */}
+          {/* TAB 6: Deployment Guide */}
           {(currentTab === 'deploy' || currentTab === 'deployment') && (
             <DeploymentGuide language={language} />
           )}

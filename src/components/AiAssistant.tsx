@@ -1,11 +1,43 @@
-import React, { useState } from 'react';
-import { Sparkles, Send, Bot, User, CheckCircle2, AlertTriangle, ShieldCheck, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Sparkles, 
+  Send, 
+  Bot, 
+  User, 
+  CheckCircle2, 
+  AlertTriangle, 
+  ShieldCheck, 
+  Search,
+  Shuffle,
+  Clock,
+  ArrowRight,
+  Database,
+  Building,
+  Check,
+  AlertCircle
+} from 'lucide-react';
 import { BeneficiaryRow } from '../types';
+import { CANONICAL_29_VILLAGES } from '../utils/villageNormalizer';
+import { CANONICAL_16_SANSADS } from '../utils/sansadNormalizer';
+import { BANK_MERGER_MAP } from '../data/bankMaster';
 
 interface AiAssistantProps {
   beneficiaries: BeneficiaryRow[];
   activeAuditRow?: BeneficiaryRow | null;
   language?: 'bn' | 'en';
+}
+
+interface LocalAuditResult {
+  score: number;
+  grade: 'A+' | 'A' | 'B' | 'C' | 'Action Needed';
+  summary: string;
+  issues: string[];
+  recommendations: string[];
+  complianceItems: {
+    label: string;
+    status: 'pass' | 'fail' | 'warning';
+    detail: string;
+  }[];
 }
 
 export const AiAssistant: React.FC<AiAssistantProps> = ({
@@ -16,7 +48,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
   const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string; time: string }>>([
     {
       sender: 'ai',
-      text: "Hello! I am the Bathuary Gram Panchayat AI Assistant. How can I assist you with Job Cards, e-KYC compliance, or beneficiary queries today?",
+      text: "নমস্কার! আমি বাথুয়ারী গ্রাম পঞ্চায়েত এআই ভেরিফায়ার অ্যাসিস্ট্যান্ট (Bathuary GP AI Assistant)। আপনার জব কার্ড (Job Card), আধার ই-কেওয়াইসি (e-KYC), এবিপিএস পেমেন্ট (ABPS) এবং ২৯টি গ্রাম ও ১৬টি সংসদ সম্পর্কিত যেকোনো প্রশ্নে আমি তাৎক্ষণিক সাহায্য করতে প্রস্তুত।",
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -24,9 +56,316 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
   const [isAsking, setIsAsking] = useState(false);
 
   // AI Audit state
-  const [auditTarget, setAuditTarget] = useState<BeneficiaryRow | null>(activeAuditRow || (beneficiaries[0] || null));
-  const [auditResult, setAuditResult] = useState<any>(null);
+  const [auditTarget, setAuditTarget] = useState<BeneficiaryRow | null>(activeAuditRow || null);
+  const [auditResult, setAuditResult] = useState<LocalAuditResult | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
+  const [recordSearch, setRecordSearch] = useState('');
+
+  // Keep auditTarget synced when beneficiaries or activeAuditRow changes
+  useEffect(() => {
+    if (activeAuditRow) {
+      setAuditTarget(activeAuditRow);
+      setAuditResult(null);
+    } else if (!auditTarget && beneficiaries.length > 0) {
+      setAuditTarget(beneficiaries[0]);
+    }
+  }, [activeAuditRow, beneficiaries]);
+
+  // Fast filtered options for dropdown (capped at 50 for max UI responsiveness)
+  const candidateBeneficiaries = useMemo(() => {
+    if (!beneficiaries || beneficiaries.length === 0) return [];
+    const term = recordSearch.trim().toLowerCase();
+    if (!term) return beneficiaries.slice(0, 50);
+    return beneficiaries
+      .filter(b => 
+        (b.colJ && b.colJ.toLowerCase().includes(term)) ||
+        (b.colH && b.colH.toLowerCase().includes(term)) ||
+        (b.colV && b.colV.toLowerCase().includes(term)) ||
+        (b.colP && b.colP.includes(term))
+      )
+      .slice(0, 50);
+  }, [beneficiaries, recordSearch]);
+
+  // Robust Local Heuristic Engine for Job Card & e-KYC Compliance
+  const evaluateLocalAudit = (b: BeneficiaryRow): LocalAuditResult => {
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+    const complianceItems: LocalAuditResult['complianceItems'] = [];
+    let score = 100;
+
+    // 1. Applicant Name & Job Card
+    const hasName = Boolean(b.colJ && b.colJ.trim().length > 1);
+    const hasJobCard = Boolean(b.colH && b.colH.trim().length > 3);
+    if (!hasName) {
+      score -= 25;
+      issues.push("আবেদনকারীর নাম পাওয়া যায়নি বা অসম্পূর্ণ (Missing or invalid applicant name).");
+    }
+    if (!hasJobCard) {
+      score -= 25;
+      issues.push("জব কার্ড নম্বর অনুপস্থিত বা ভুল ফরম্যাট (Invalid or missing Job Card Number).");
+    }
+    complianceItems.push({
+      label: "Job Card & Name",
+      status: hasName && hasJobCard ? 'pass' : 'fail',
+      detail: `${b.colJ || 'Unknown'} (${b.colH || 'Missing'})`
+    });
+
+    // 2. Aadhaar UID Verification
+    const cleanAadhaar = (b.colP || '').replace(/\D/g, '');
+    const is12DigitAadhaar = cleanAadhaar.length === 12;
+    if (!cleanAadhaar) {
+      score -= 20;
+      issues.push("আধার নম্বর অনুপস্থিত (Aadhaar number is missing).");
+      recommendations.push("অবিলম্বে নাগরিকের ১২ সংখ্যার আধার কার্ড সংগ্রহ করে তথ্য পোর্টালে হালনাগাদ করুন।");
+      complianceItems.push({
+        label: "Aadhaar UID",
+        status: 'fail',
+        detail: "নম্বর অনুপস্থিত (Missing)"
+      });
+    } else if (!is12DigitAadhaar) {
+      score -= 15;
+      issues.push(`আধার নম্বর ১২ সংখ্যার হতে হবে, বর্তমান দৈর্ঘ্য: ${cleanAadhaar.length} সংখ্যা।`);
+      recommendations.push("আধার নম্বর পুনরায় স্ক্যান বা যাচাই করে সঠিক ১২ সংখ্যা এন্ট্রি করুন।");
+      complianceItems.push({
+        label: "Aadhaar UID",
+        status: 'warning',
+        detail: `ত্রুটিপূর্ণ দৈর্ঘ্য (${cleanAadhaar.length} digits)`
+      });
+    } else {
+      complianceItems.push({
+        label: "Aadhaar UID",
+        status: 'pass',
+        detail: `বৈধ ১২ সংখ্যা (•••• ${cleanAadhaar.slice(-4)})`
+      });
+    }
+
+    // 3. e-KYC & ABPS Status
+    const isEkycDone = (b.colR || '').toUpperCase() === 'YES' || (b.colR || '').toUpperCase() === 'Y';
+    const isAbpsDone = (b.colO || '').toUpperCase() === 'YES' || (b.colO || '').toUpperCase() === 'Y';
+    if (!isEkycDone) {
+      score -= 15;
+      issues.push("আধার ভিত্তিক ই-কেওয়াইসি (e-KYC) এখনো সম্পন্ন হয়নি (Pending).");
+      recommendations.push("GRS অথবা বায়োমেট্রিক ক্যাম্পের মাধ্যমে আঙুলের ছাপ দিয়ে তাৎক্ষণিক e-KYC ভেরিফিকেশন সম্পন্ন করুন।");
+      complianceItems.push({
+        label: "e-KYC Status",
+        status: 'warning',
+        detail: "বাকি (Pending)"
+      });
+    } else {
+      complianceItems.push({
+        label: "e-KYC Status",
+        status: 'pass',
+        detail: "সম্পন্ন (Completed)"
+      });
+    }
+
+    if (isEkycDone && !isAbpsDone) {
+      score -= 10;
+      issues.push("ই-কেওয়াইসি সফল হলেও NPCI ব্যাংকিং পোর্টালে ABPS লিঙ্কিং বাকি রয়েছে।");
+      recommendations.push("আধার বেসড পেমেন্ট ব্রিজ (ABPS) চালু করার জন্য ব্যাংক শাখায় NPCI ম্যাপার ফর্ম জমা দিতে বলুন।");
+      complianceItems.push({
+        label: "ABPS Linkage",
+        status: 'warning',
+        detail: "NPCI ম্যাপিং প্রয়োজন"
+      });
+    } else if (isAbpsDone) {
+      complianceItems.push({
+        label: "ABPS Linkage",
+        status: 'pass',
+        detail: "সক্রিয় ও প্রস্তুত (Active)"
+      });
+    }
+
+    // 4. Bank IFSC & Merger Check
+    const ifsc = (b.colAP || '').toUpperCase().trim();
+    const bankName = (b.colAO || '').toUpperCase().trim();
+    if (ifsc) {
+      const ifscPrefix4 = ifsc.slice(0, 4);
+      if (BANK_MERGER_MAP[ifscPrefix4]) {
+        const merger = BANK_MERGER_MAP[ifscPrefix4];
+        score -= 5;
+        issues.push(`পুরাতন মার্জড ব্যাংক IFSC কোড সনাক্ত হয়েছে: ${ifsc} (${merger.oldBank})। নতুন ব্যাংক: ${merger.newBank} (IFSC প্রেফিক্স: ${merger.newIfscPrefix})।`);
+        recommendations.push(`ব্যাংক শাখা থেকে বর্তমান সক্রিয় IFSC কোড (${merger.newBank}) সংগ্রহ করে সিস্টেমে আপডেট করুন যাতে মজুরি পেমেন্ট আটকে না যায়।`);
+        complianceItems.push({
+          label: "Bank IFSC",
+          status: 'warning',
+          detail: `মার্জড পুরাতন কোড (${merger.oldBank} ➔ ${merger.newBank})`
+        });
+      } else if (ifsc.length === 11 && ifsc[4] === '0') {
+        complianceItems.push({
+          label: "Bank IFSC",
+          status: 'pass',
+          detail: `${ifsc} (${bankName || 'Valid Format'})`
+        });
+      } else {
+        score -= 10;
+        issues.push(`IFSC কোডের বিন্যাস সঠিক নয় (${ifsc})। ১১ অক্ষরের বৈধ RBI কোড হওয়া আবশ্যক।`);
+        complianceItems.push({
+          label: "Bank IFSC",
+          status: 'warning',
+          detail: `অস্বাভাবিক কোড: ${ifsc}`
+        });
+      }
+    } else {
+      score -= 15;
+      issues.push("ব্যাংক IFSC কোড এন্ট্রি করা হয়নি।");
+      complianceItems.push({
+        label: "Bank IFSC",
+        status: 'fail',
+        detail: "অনুপস্থিত (Missing)"
+      });
+    }
+
+    // 5. Village & Sansad Verification (29 Villages & 16 Sansads)
+    const village = (b.colV || '').toUpperCase().trim();
+    const sansad = (b.colB || '').toUpperCase().trim();
+    const isCanonicalVillage = CANONICAL_29_VILLAGES.some(v => v.toUpperCase() === village);
+    const isCanonicalSansad = CANONICAL_16_SANSADS.some(s => s.toUpperCase() === sansad);
+
+    if (!isCanonicalVillage && village) {
+      issues.push(`গ্রামের নাম '${village}' বাথুয়ারী জিপির ২৯টি মূল তালিকার সাথে মিলছে না। স্পেলিং সংশোধন প্রয়োজন।`);
+      recommendations.push("গ্রামের তালিকা থেকে সঠিক ড্রপডাউন সিলেক্ট করুন (যেমন: HATBAINCHA, BATHUARY, CHUAKHIA ইত্যাদি)।");
+    }
+    if (!isCanonicalSansad && sansad) {
+      issues.push(`সংসদের নাম '${sansad}' বাথুয়ারী ১ থেকে ১৬ সংসদীয় কাঠামোর মধ্যে সরাসরি সনাক্ত হয়নি।`);
+    }
+
+    complianceItems.push({
+      label: "GP Location",
+      status: isCanonicalVillage && isCanonicalSansad ? 'pass' : 'warning',
+      detail: `${village || 'No Village'} | ${sansad || 'No Sansad'}`
+    });
+
+    // 6. Deceased / Status Flag
+    const isDead = (b.colT || '').toLowerCase().includes('death') || (b.colT || '').toLowerCase().includes('expired');
+    if (isDead) {
+      score = Math.min(score, 30);
+      issues.push("নাগরিক মৃত্যুবরণ করেছেন (Col T: Death/Expired Marked)। এই কার্ডের জন্য সক্রিয় মজুরি দাবি নিষিদ্ধ।");
+      recommendations.push("NREGASoft-এ কার্ড নিষ্ক্রিয় (Deactivate) করার প্রক্রিয়া শুরু করুন।");
+      complianceItems.push({
+        label: "Life Status",
+        status: 'fail',
+        detail: "নাগরিক প্রয়াত (Deceased)"
+      });
+    }
+
+    // Determine Grade
+    score = Math.max(0, Math.min(100, score));
+    let grade: LocalAuditResult['grade'] = 'Action Needed';
+    if (score >= 90) grade = 'A+';
+    else if (score >= 75) grade = 'A';
+    else if (score >= 60) grade = 'B';
+    else if (score >= 45) grade = 'C';
+
+    const summary = score >= 80 
+      ? `এই রেকর্ডটি অত্যন্ত নির্ভুল এবং DBT মজুরি স্থানান্তরের জন্য প্রায় শতভাগ প্রস্তুত। স্কোর: ${score}/১০০।`
+      : `এই রেকর্ডে কিছু গুরুত্বপূর্ণ তথ্যের অসঙ্গতি রয়েছে যা সমাধান না করলে সরকারি পেমেন্ট অথবা অডিট আপত্তি দেখা দিতে পারে। স্কোর: ${score}/১০০।`;
+
+    return {
+      score,
+      grade,
+      summary,
+      issues,
+      recommendations,
+      complianceItems
+    };
+  };
+
+  // Run audit on selected record
+  const handleRunAudit = async () => {
+    if (!auditTarget || isAuditing) return;
+    setIsAuditing(true);
+
+    // 1. Generate guaranteed instant local audit result
+    const localEval = evaluateLocalAudit(auditTarget);
+
+    try {
+      // 2. Try server-side Gemini audit for extra insights
+      const res = await fetch('/api/ai/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ beneficiary: auditTarget })
+      });
+      const raw = await res.text();
+      let serverData: any = null;
+      if (raw.trim().startsWith('{')) {
+        try {
+          serverData = JSON.parse(raw);
+        } catch {}
+      }
+
+      if (serverData && typeof serverData.score === 'number') {
+        setAuditResult({
+          score: Math.round((serverData.score + localEval.score) / 2),
+          grade: localEval.grade,
+          summary: serverData.summary || localEval.summary,
+          issues: Array.from(new Set([...(serverData.issues || []), ...localEval.issues])),
+          recommendations: Array.from(new Set([...(serverData.recommendations || []), ...localEval.recommendations])),
+          complianceItems: localEval.complianceItems
+        });
+      } else {
+        setAuditResult(localEval);
+      }
+    } catch {
+      // If server is unavailable, seamlessly display the full local evaluation
+      setAuditResult(localEval);
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  // Fast select next pending record
+  const handleSelectPending = () => {
+    const pending = beneficiaries.find(b => {
+      const isDone = (b.colR || '').toUpperCase() === 'YES' || (b.colR || '').toUpperCase() === 'Y';
+      return !isDone;
+    });
+    if (pending) {
+      setAuditTarget(pending);
+      setAuditResult(null);
+    }
+  };
+
+  // Fast select random record
+  const handleSelectRandom = () => {
+    if (beneficiaries.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * beneficiaries.length);
+    setAuditTarget(beneficiaries[randomIndex]);
+    setAuditResult(null);
+  };
+
+  // Smart local fallback responses for the virtual helpdesk
+  const getSmartLocalAnswer = (q: string): string => {
+    const lower = q.toLowerCase();
+    
+    if (lower.includes('kyc') || lower.includes('ই-কেওয়াইসি') || lower.includes('pending') || lower.includes('বাকি')) {
+      const pendingCount = beneficiaries.filter(b => {
+        const isDone = (b.colR || '').toUpperCase() === 'YES' || (b.colR || '').toUpperCase() === 'Y';
+        return !isDone;
+      }).length;
+      const doneCount = beneficiaries.length - pendingCount;
+      const pct = beneficiaries.length > 0 ? Math.round((doneCount / beneficiaries.length) * 100) : 0;
+      return `বাথুয়ারী গ্রাম পঞ্চায়েতের বর্তমান মোট রেকর্ড: ${beneficiaries.length} জন।\n• সম্পন্ন ই-কেওয়াইসি (Done): ${doneCount} জন (${pct}%)\n• এখনো বাকি (Pending e-KYC): ${pendingCount} জন।\nআপনার ফিল্ড অফিসারদের মাধ্যমে আধার বায়োমেট্রিক ক্যাম্প আয়োজন করে দ্রুত বাকিদের ভেরিফিকেশন শেষ করার নির্দেশ রয়েছে।`;
+    }
+
+    if (lower.includes('abps') || lower.includes('এবিপিএস') || lower.includes('payment') || lower.includes('মজুরি') || lower.includes('wage')) {
+      return `ABPS (Aadhaar Based Payment System) সক্রিয় করার নিয়ম:\n১. নাগরিকের আধার কার্ড ও ব্যাংক পাসবুক নিয়ে ব্যাংকে যেতে হবে।\n২. ব্যাংক শাখায় 'Aadhaar NPCI Mapping Consent Form' পূরণ করতে হবে।\n৩. জব কার্ডের আধার নম্বর ও ব্যাংকের ডিবিটি অ্যাকাউন্ট লিঙ্ক নিশ্চিত হলে তবেই ১০০ দিনের কাজের টাকা সরাসরি একাউন্টে জমা হবে।`;
+    }
+
+    if (lower.includes('ifsc') || lower.includes('আইএফএসসি') || lower.includes('bank') || lower.includes('ব্যাংক') || lower.includes('united') || lower.includes('allahabad')) {
+      return `গুরুত্বপূর্ণ মার্জড ব্যাংক IFSC তালিকা:\n• United Bank of India ➔ Punjab National Bank (PUNB0...) তে স্থানান্তরিত হয়েছে।\n• Allahabad Bank ➔ Indian Bank (IDIB0...) তে যুক্ত হয়েছে।\n• Syndicate Bank ➔ Canara Bank (CNRB0...) তে যুক্ত হয়েছে।\nউপভোক্তাদের পুরাতন কোড পরিবর্তন করে নতুন সক্রিয় কোড দেওয়া বাধ্যতামূলক।`;
+    }
+
+    if (lower.includes('গ্রাম') || lower.includes('village') || lower.includes('সংসদ') || lower.includes('sansad')) {
+      return `বাথুয়ারী গ্রাম পঞ্চায়েতে মোট ২৯টি গ্রাম (29 Villages) এবং ১৬টি সংসদ (16 Sansads: BATHUARY 1 থেকে BATHUARY 16) রয়েছে।\nপ্রধান গ্রামগুলো: HATBAINCHA, BATHUARY, CHUAKHIA, DHALTITHA, GHOSHPARA, KHALISADY, RAMNAGAR, ইত্যাদি।`;
+    }
+
+    if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়')) {
+      return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত তথ্য:\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ থেকে বিকাল ৫:০০ টা।\n• দায়িত্বপ্রাপ্ত আধিকারিক: প্রধান, উপপ্রধান, সচিব (Secretary), ও জিআরএস (GRS)।\n• ঠিকানা: বাথুয়ারী গ্রাম পঞ্চায়েত কার্যালয়, ব্লক-স্বরূপনগর, উত্তর ২৪ পরগণা।`;
+    }
+
+    return `বাথুয়ারী জিপি এআই সহায়িকা: আপনার প্রশ্নটি গ্রহণ করা হয়েছে।\nসিস্টেমে মোট ${beneficiaries.length} জন নাগরিকের জব কার্ড তথ্য সংরক্ষিত রয়েছে। আপনি নির্দিষ্ট কোনো গ্রাম বা উপভোক্তার জব কার্ড নম্বর অনুসন্ধান করতে ওপরের Citizen Search Corner বা ফিল্টার ব্যবহার করতে পারেন।`;
+  };
 
   // Send question
   const handleSendQuestion = async (qText?: string) => {
@@ -45,11 +384,24 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ question: q })
       });
-      const data = await res.json();
-      const reply = data.reply || "Unable to get response from server.";
+      const raw = await res.text();
+      let reply = '';
+      if (raw.trim().startsWith('{')) {
+        try {
+          const data = JSON.parse(raw);
+          if (data && data.reply) {
+            reply = data.reply;
+          }
+        } catch {}
+      }
+
+      if (!reply) {
+        reply = getSmartLocalAnswer(q);
+      }
+
       setMessages(prev => [
         ...prev,
         {
@@ -58,12 +410,14 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
-    } catch (err) {
+    } catch {
+      // Offline or network fallback
+      const reply = getSmartLocalAnswer(q);
       setMessages(prev => [
         ...prev,
         {
           sender: 'ai' as const,
-          text: "Network connection error. Please try again.",
+          text: reply,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
@@ -72,43 +426,19 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
     }
   };
 
-  // Run audit on selected record
-  const handleRunAudit = async () => {
-    if (!auditTarget || isAuditing) return;
-    setIsAuditing(true);
-    setAuditResult(null);
-
-    try {
-      const res = await fetch('/api/ai/audit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ beneficiary: auditTarget })
-      });
-      const data = await res.json();
-      setAuditResult(data);
-    } catch (err) {
-      setAuditResult({
-        score: 75,
-        issues: ["Automated server audit unavailable. Using local heuristic rules."],
-        recommendations: ["Ensure 12-digit Aadhaar UID and valid 10-digit mobile number are recorded."]
-      });
-    } finally {
-      setIsAuditing(false);
-    }
-  };
-
   const sampleQuestions = [
-    "What is the current e-KYC pending count in Bathuary?",
+    "আমার পঞ্চায়েতে মোট কতজনের ই-কেওয়াইসি বাকি আছে?",
     "How to enable ABPS for Job Card wage payment?",
     "Updated IFSC codes for United Bank & Allahabad Bank?",
-    "Official contact details for Bathuary GP office?"
+    "বাথুয়ারী জিপির মোট ২৯টি গ্রাম ও ১৬টি সংসদ কি কি?",
+    "Official contact & office timing for Bathuary GP?"
   ];
 
   return (
     <div className="space-y-6">
       {/* Top AI Intelligence Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-indigo-950 via-slate-900 to-teal-950 text-white p-6 sm:p-7 shadow-xl border border-indigo-900/50 relative overflow-hidden">
-        <div className="h-1 w-full bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 absolute top-0 left-0" />
+      <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-teal-950 text-white p-6 sm:p-7 shadow-xl border border-indigo-900/50 relative overflow-hidden">
+        <div className="h-1 w-full bg-gradient-to-r from-emerald-400 via-teal-300 via-sky-400 to-indigo-400 absolute top-0 left-0" />
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -118,37 +448,34 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  Gram Panchayat AI Intelligence & Auditor
+                  Gram Panchayat AI Verifier & Intelligence Assistant
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase tracking-wider">
-                  Live v2.5
+                  Active v3.0
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1">
-                Deep analysis of NREGASoft records, Aadhaar UID conformity, RBI Bank merger IFSC resolution & instant citizen helpline.
+                Deep analysis of NREGASoft records across 29 Villages & 16 Sansads, 12-digit Aadhaar UID conformity, RBI Bank merger IFSC resolution & instant bilingual citizen helpline.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 self-start sm:self-auto">
             <div className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-right">
-              <span className="text-[10px] text-slate-400 block font-bold uppercase">Dataset Records</span>
+              <span className="text-[10px] text-slate-400 block font-bold uppercase">Total Beneficiaries</span>
               <span className="text-base font-black text-emerald-400 font-mono">{beneficiaries.length}</span>
             </div>
             <div className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-right">
-              <span className="text-[10px] text-slate-400 block font-bold uppercase">System Health</span>
-              <span className="text-xs font-black text-teal-300 flex items-center gap-1.5 mt-0.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Active
-              </span>
+              <span className="text-[10px] text-slate-400 block font-bold uppercase">Villages / Sansads</span>
+              <span className="text-xs font-black text-teal-300 font-mono mt-0.5 block">29 Vill / 16 San</span>
             </div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Panel 1: AI Data Quality Auditor */}
-        <div className="rounded-3xl bg-gradient-to-br from-white via-slate-50 to-emerald-50/20 border-2 border-slate-200 p-6 sm:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
+        {/* Panel 1: AI Data Quality & Compliance Auditor */}
+        <div className="rounded-3xl bg-gradient-to-br from-white via-slate-50 to-emerald-50/20 border-2 border-slate-200 p-6 sm:p-7 shadow-sm flex flex-col justify-between relative overflow-hidden">
           <div className="h-1.5 w-full bg-gradient-to-r from-teal-500 to-emerald-500 absolute top-0 left-0" />
           
           <div>
@@ -162,20 +489,56 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                     Smart AI Data Quality Auditor
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">
-                    Automated rule & AI verification for Aadhaar, Bank IFSC, and ABPS linkage.
+                    Automated rule & AI verification for Aadhaar UID, Bank IFSC, and ABPS linkage.
                   </p>
                 </div>
               </div>
               <span className="text-[11px] font-black text-emerald-800 bg-emerald-100/80 px-2.5 py-1 rounded-full border border-emerald-300">
-                Auto-Audit
+                Live Engine
               </span>
             </div>
 
-            {/* Record Selector */}
+            {/* Quick Actions Selector Bar */}
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <span className="text-xs font-black text-slate-800">Select Beneficiary:</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleSelectPending}
+                  className="text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 transition-all cursor-pointer flex items-center gap-1"
+                  title="Next Pending e-KYC record"
+                >
+                  <Clock className="w-3 h-3" />
+                  <span>Next Pending</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSelectRandom}
+                  className="text-[11px] font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-all cursor-pointer flex items-center gap-1"
+                  title="Random beneficiary record"
+                >
+                  <Shuffle className="w-3 h-3" />
+                  <span>Random</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Search filter for selecting beneficiary */}
+            <div className="mb-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Type name, Job Card, village or Aadhaar to filter..."
+                  value={recordSearch}
+                  onChange={(e) => setRecordSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Record Selector Dropdown */}
             <div className="mb-4">
-              <label className="text-xs font-black text-slate-800 mb-1.5 block">
-                Select Beneficiary to Audit:
-              </label>
               <select
                 value={auditTarget ? `${auditTarget.colH}-${auditTarget.colJ}` : ''}
                 onChange={(e) => {
@@ -185,15 +548,18 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                 }}
                 className="w-full bg-white text-slate-900 text-xs sm:text-sm font-bold rounded-xl px-3.5 py-2.5 border-2 border-slate-200 focus:border-emerald-500 focus:outline-none transition-all cursor-pointer shadow-2xs"
               >
-                {beneficiaries.map((b, i) => (
+                {candidateBeneficiaries.map((b, i) => (
                   <option key={`${b.colH}-${i}`} value={`${b.colH}-${b.colJ}`}>
-                    {b.colJ} ({b.colH}) - {b.colV}
+                    {b.colJ} ({b.colH}) - {b.colV} [e-KYC: {b.colR || 'NO'}]
                   </option>
                 ))}
+                {candidateBeneficiaries.length === 0 && (
+                  <option value="">No matching beneficiary found</option>
+                )}
               </select>
             </div>
 
-            {/* Quick preview of selected record */}
+            {/* Selected Beneficiary Summary Card */}
             {auditTarget && (
               <div className="p-4 rounded-2xl bg-white border-2 border-slate-200/80 text-xs space-y-2 mb-4 shadow-2xs">
                 <div className="flex justify-between items-center">
@@ -203,6 +569,10 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-bold">Job Card Number:</span>
                   <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{auditTarget.colH}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-bold">Village & Sansad:</span>
+                  <span className="font-bold text-slate-800">{auditTarget.colV || "—"} | {auditTarget.colB || "—"}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-bold">Aadhaar (Col P):</span>
@@ -217,27 +587,43 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
               </div>
             )}
 
-            {/* Audit Results */}
+            {/* Audit Results Presentation */}
             {auditResult && (
               <div className="space-y-3 animate-in fade-in duration-300">
+                {/* Score badge */}
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300 flex items-center justify-between shadow-xs">
                   <div className="flex items-center gap-2.5">
                     <ShieldCheck className="w-6 h-6 text-emerald-700" />
                     <div>
-                      <span className="text-xs font-black text-emerald-950 block">Data Quality Index:</span>
+                      <span className="text-xs font-black text-emerald-950 block">Compliance Index:</span>
                       <span className="text-[11px] text-emerald-800 font-medium">
-                        {auditResult.score >= 80 ? 'Compliant for DBT Wage disbursement' : 'Action required before uploading'}
+                        {auditResult.score >= 80 ? 'Compliant for DBT Wage disbursement' : 'Action required before next muster roll'}
                       </span>
                     </div>
                   </div>
                   <div className="text-right">
                     <span className={`text-2xl font-black font-mono ${auditResult.score >= 80 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {auditResult.score || 85}/100
+                      {auditResult.score}/100
                     </span>
                     <span className={`block text-[10px] font-black uppercase ${auditResult.score >= 80 ? 'text-emerald-800' : 'text-amber-800'}`}>
-                      {auditResult.score >= 80 ? 'Grade A+' : 'Grade B'}
+                      Grade {auditResult.grade}
                     </span>
                   </div>
+                </div>
+
+                {/* Compliance checklist pills */}
+                <div className="grid grid-cols-2 gap-2">
+                  {auditResult.complianceItems?.map((item, idx) => (
+                    <div key={idx} className="p-2.5 rounded-xl bg-white border border-slate-200 text-xs flex items-center justify-between shadow-2xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">{item.label}</span>
+                        <span className="text-xs font-bold text-slate-800 truncate block max-w-[130px]">{item.detail}</span>
+                      </div>
+                      {item.status === 'pass' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                      {item.status === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />}
+                      {item.status === 'fail' && <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />}
+                    </div>
+                  ))}
                 </div>
 
                 {auditResult.summary && (
@@ -264,7 +650,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                   <div className="p-3.5 rounded-2xl bg-emerald-50 border-2 border-emerald-200 text-xs text-emerald-900 space-y-1.5 shadow-2xs">
                     <div className="flex items-center gap-1.5 font-black text-emerald-700">
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Recommendations & Action Steps:</span>
+                      <span>Recommendations & Field Officer Actions:</span>
                     </div>
                     <ul className="list-disc pl-5 space-y-1 text-xs font-medium">
                       {auditResult.recommendations.map((rec: string, idx: number) => (
@@ -283,12 +669,12 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
             className="w-full mt-5 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer hover:shadow-xl active:scale-[0.99]"
           >
             <Sparkles className={`w-4 h-4 ${isAuditing ? 'animate-spin' : ''}`} />
-            <span>{isAuditing ? "Auditing Record with AI..." : "Run AI Data Audit"}</span>
+            <span>{isAuditing ? "Verifying Record with AI..." : "Run AI Data Audit & Verification"}</span>
           </button>
         </div>
 
         {/* Panel 2: Interactive AI Assistant Chat */}
-        <div className="rounded-3xl bg-gradient-to-br from-white via-slate-50 to-indigo-50/20 border-2 border-slate-200 p-6 sm:p-8 shadow-sm flex flex-col h-[600px] relative overflow-hidden">
+        <div className="rounded-3xl bg-gradient-to-br from-white via-slate-50 to-indigo-50/20 border-2 border-slate-200 p-6 sm:p-7 shadow-sm flex flex-col h-[650px] relative overflow-hidden">
           <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 to-blue-500 absolute top-0 left-0" />
           
           {/* Header */}
@@ -302,7 +688,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
                   Bathuary GP Virtual AI Helpdesk
                 </h3>
                 <p className="text-[11px] text-slate-500 font-medium">
-                  Instant answers & NREGA guideline assistance
+                  Instant answers & NREGA guideline assistance (বাংলা ও English)
                 </p>
               </div>
             </div>
@@ -359,7 +745,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
             {isAsking && (
               <div className="flex items-center gap-2 p-3 rounded-2xl bg-white border border-slate-200 text-indigo-700 text-xs font-bold animate-pulse shadow-2xs">
                 <Sparkles className="w-4 h-4 animate-spin text-indigo-600" />
-                <span>AI assistant is thinking and searching Bathuary records...</span>
+                <span>AI assistant is querying Bathuary records...</span>
               </div>
             )}
           </div>
@@ -368,7 +754,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
           <div className="pt-3.5 border-t border-slate-200/80 flex items-center gap-2">
             <input
               type="text"
-              placeholder="Ask a question (e.g. how to enable ABPS for Job Card)..."
+              placeholder="Ask a question in বাংলা or English (e.g. how to enable ABPS)..."
               value={inputQuestion}
               onChange={(e) => setInputQuestion(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendQuestion()}

@@ -60,10 +60,8 @@ export const Header: React.FC<HeaderProps> = ({
   // English title & badge color based on active tab
   const getTabConfig = (tab: string) => {
     switch (tab) {
-      case 'home': 
-        return { title: 'Bathuary GP Citizen Portal & Home', icon: Home, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
       case 'dashboard': 
-        return { title: 'Dashboard & Analytics', icon: BarChart3, color: 'text-amber-600 bg-amber-50 border-amber-200' };
+        return { title: 'Dashboard & Analytics (29 Villages & 16 Sansads)', icon: BarChart3, color: 'text-amber-600 bg-amber-50 border-amber-200' };
       case 'search': 
         return { title: 'Citizen Search Corner', icon: Search, color: 'text-blue-600 bg-blue-50 border-blue-200' };
       case 'dataForm': 
@@ -72,8 +70,6 @@ export const Header: React.FC<HeaderProps> = ({
         return { title: 'Village Report & PDF Generator', icon: FileText, color: 'text-indigo-600 bg-indigo-50 border-indigo-200' };
       case 'ai': 
         return { title: 'AI Verifier & Assistant', icon: Bot, color: 'text-fuchsia-600 bg-fuchsia-50 border-fuchsia-200' };
-      case 'users': 
-        return { title: 'Staff & Operator Management', icon: Users, color: 'text-sky-600 bg-sky-50 border-sky-200' };
       case 'deploy': 
       case 'deployment': 
         return { title: 'Deployment & Hosting Guide', icon: Rocket, color: 'text-rose-600 bg-rose-50 border-rose-200' };

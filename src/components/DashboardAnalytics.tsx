@@ -26,7 +26,6 @@ interface DashboardProps {
   onSansadChange: (sansad: string) => void;
   onSelectCategoryReport: (type: 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH') => void;
   onOpenSyncModal?: () => void;
-  onNavigateToHome?: () => void;
   language?: 'bn' | 'en';
 }
 
@@ -37,8 +36,7 @@ export const DashboardAnalytics: React.FC<DashboardProps> = ({
   selectedSansad,
   onSansadChange,
   onSelectCategoryReport,
-  onOpenSyncModal,
-  onNavigateToHome
+  onOpenSyncModal
 }) => {
   const [villageSearch, setVillageSearch] = useState('');
   const [sortBy, setSortBy] = useState<'total' | 'progress' | 'name'>('total');
@@ -64,32 +62,6 @@ export const DashboardAnalytics: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top View Selector: Home Portal vs Analytics Dashboard */}
-      {onNavigateToHome && (
-        <div className="flex items-center justify-between bg-white p-3 rounded-2xl border-2 border-slate-200/80 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onNavigateToHome}
-              className="px-4 py-2 rounded-xl text-xs font-black text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <span>🏠</span>
-              <span>Home Portal Overview</span>
-            </button>
-            <button
-              type="button"
-              className="px-4 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm flex items-center gap-2 cursor-default"
-            >
-              <span>📊</span>
-              <span>Analytics Dashboard (Live)</span>
-            </button>
-          </div>
-          <span className="text-xs text-emerald-800 font-black hidden md:flex items-center gap-1.5 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Real-time Job Card & e-KYC Monitoring
-          </span>
-        </div>
-      )}
 
       {/* Top Banner with Sansad Selector */}
       <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 shadow-xl border border-indigo-900/50 relative overflow-hidden">

@@ -87,7 +87,7 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
       .catch(() => {});
   }, []);
 
-  // Save Google Sheet URL permanently in server system configuration file
+  // Save Google Sheet URL permanently in server system configuration file & local safeStorage
   const handleSavePermanently = async (syncNow: boolean = true) => {
     const trimmedUrl = sheetUrl.trim();
     if (!trimmedUrl) {
@@ -96,50 +96,90 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
     }
 
     setIsLoading(true);
-    setStatusMessage({ type: 'info', text: 'গুগল শীট লিঙ্ক সার্ভারে স্থায়ীভাবে সেভ ও লাইভ সিঙ্ক করা হচ্ছে...' });
+    setStatusMessage({ type: 'info', text: 'গুগল শীট লিঙ্ক স্থায়ীভাবে সেভ ও লাইভ সিঙ্ক করা হচ্ছে...' });
 
     try {
-      const res = await fetch('/api/google-sheet/save-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({
-          sheetUrl: trimmedUrl,
-          autoSync: autoSyncEnabled,
-          syncNow
-        })
-      });
+      let serverSaved = false;
+      let beneficiariesLoaded = false;
 
-      const data = await res.json();
-      if (res.ok && data.status === 'success') {
-        setIsPermanentlySaved(true);
-        setSavedConfig(data.config);
-        setIsEditingUrl(false);
-        safeStorage.setItem('bathuary_google_sheet_url', trimmedUrl);
-        safeStorage.setItem('bathuary_auto_sync_enabled', String(autoSyncEnabled));
+      // Try saving to backend server endpoint first
+      try {
+        const res = await fetch('/api/google-sheet/save-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            sheetUrl: trimmedUrl,
+            autoSync: autoSyncEnabled,
+            syncNow
+          })
+        });
 
-        if (Array.isArray(data.beneficiaries) && data.beneficiaries.length > 0) {
-          onDataImported(data.beneficiaries);
-          setImportStats({
-            rows: data.total,
-            villages: data.villagesCount,
-            sansads: data.sansadsCount
-          });
+        const contentType = res.headers.get('content-type') || '';
+        const rawText = await res.text();
+        let data: any = null;
+
+        if (contentType.includes('application/json') || rawText.trim().startsWith('{')) {
+          try {
+            data = JSON.parse(rawText);
+          } catch {
+            data = null;
+          }
         }
 
-        setStatusMessage({
-          type: 'success',
-          text: `✓ ${data.message || 'Google Sheet link permanently saved and live synchronized!'}`
-        });
+        if (res.ok && data?.status === 'success') {
+          serverSaved = true;
+          setIsPermanentlySaved(true);
+          setSavedConfig(data.config);
+          setIsEditingUrl(false);
+          safeStorage.setItem('bathuary_google_sheet_url', trimmedUrl);
+          safeStorage.setItem('bathuary_auto_sync_enabled', String(autoSyncEnabled));
+
+          if (Array.isArray(data.beneficiaries) && data.beneficiaries.length > 0) {
+            beneficiariesLoaded = true;
+            onDataImported(data.beneficiaries);
+            setImportStats({
+              rows: data.total,
+              villages: data.villagesCount,
+              sansads: data.sansadsCount
+            });
+          }
+
+          setStatusMessage({
+            type: 'success',
+            text: `✓ ${data.message || 'Google Sheet link permanently saved and live synchronized!'}`
+          });
+          return;
+        }
+      } catch (netErr) {
+        console.warn("Server-side save-link proxy notice, applying local persistent storage:", netErr);
+      }
+
+      // If server responded with HTML or was offline, store permanently in browser safeStorage
+      safeStorage.setItem('bathuary_google_sheet_url', trimmedUrl);
+      safeStorage.setItem('bathuary_auto_sync_enabled', String(autoSyncEnabled));
+      setIsPermanentlySaved(true);
+      setIsEditingUrl(false);
+      setSavedConfig({
+        sheetUrl: trimmedUrl,
+        savedAt: new Date().toISOString(),
+        savedBy: 'System Admin',
+        autoSync: autoSyncEnabled,
+        lastSyncStatus: 'Saved permanently in browser storage'
+      });
+
+      // If syncNow was requested and not yet loaded from server, fetch via client-side pipeline
+      if (syncNow && !beneficiariesLoaded) {
+        await handleFetchGoogleSheet();
       } else {
         setStatusMessage({
-          type: 'error',
-          text: data.message || 'গুগল শীট লিঙ্ক সেভ করতে সমস্যা হয়েছে।'
+          type: 'success',
+          text: '✓ গুগল শীট লিঙ্কটি ব্রাউজার সিস্টেমে স্থায়ীভাবে সেভ করা হয়েছে (Permanently saved in persistent storage).'
         });
       }
     } catch (err: any) {
       setStatusMessage({
         type: 'error',
-        text: `Error saving permanently: ${err.message || 'Network connection failed'}`
+        text: `Error saving: ${err?.message || 'Connection issue'}`
       });
     } finally {
       setIsLoading(false);
@@ -153,26 +193,32 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
     }
     setIsLoading(true);
     try {
-      const res = await fetch('/api/google-sheet/clear-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (res.ok && data.status === 'success') {
-        setIsPermanentlySaved(false);
-        setSavedConfig(null);
-        setSheetUrl('');
-        setIsEditingUrl(true);
-        safeStorage.removeItem('bathuary_google_sheet_url');
-        setStatusMessage({
-          type: 'info',
-          text: '✓ স্থায়ী গুগল শীট লিঙ্ক সফলভাবে মুছে ফেলা হয়েছে।'
+      try {
+        const res = await fetch('/api/google-sheet/clear-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
         });
+        const rawText = await res.text();
+        if (rawText.trim().startsWith('{')) {
+          JSON.parse(rawText);
+        }
+      } catch (err) {
+        console.warn("Backend clear notice:", err);
       }
+
+      setIsPermanentlySaved(false);
+      setSavedConfig(null);
+      setSheetUrl('');
+      setIsEditingUrl(true);
+      safeStorage.removeItem('bathuary_google_sheet_url');
+      setStatusMessage({
+        type: 'info',
+        text: '✓ স্থায়ী গুগল শীট লিঙ্ক সফলভাবে মুছে ফেলা হয়েছে।'
+      });
     } catch (err: any) {
       setStatusMessage({
         type: 'error',
-        text: 'Failed to clear saved link: ' + err.message
+        text: 'Failed to clear saved link: ' + (err?.message || 'Error')
       });
     } finally {
       setIsLoading(false);

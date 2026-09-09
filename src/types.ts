@@ -97,10 +97,12 @@ export interface VillageStat {
 export interface GoogleSheetConfig {
   sheetUrl: string;
   autoSync: boolean;
-  lastSyncTimestamp: string;
-  totalRecords: number;
-  villagesCount: number;
-  sansadsCount: number;
-  savedAt: string;
-  updatedAt: string;
+  lastSyncTimestamp?: string;
+  totalRecords?: number;
+  villagesCount?: number;
+  sansadsCount?: number;
+  savedAt?: string;
+  updatedAt?: string;
+  savedBy?: string;
+  lastSyncStatus?: string;
 }

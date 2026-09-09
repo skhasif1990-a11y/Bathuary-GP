@@ -616,6 +616,17 @@ export function canonicalizeBankName(raw: string): string {
   return clean;
 }
 
+export const BANK_MERGER_MAP: Record<string, { oldBank: string; newBank: string; newIfscPrefix: string }> = {
+  UTBI: { oldBank: "United Bank of India", newBank: "Punjab National Bank", newIfscPrefix: "PUNB" },
+  ALLA: { oldBank: "Allahabad Bank", newBank: "Indian Bank", newIfscPrefix: "IDIB" },
+  SYNB: { oldBank: "Syndicate Bank", newBank: "Canara Bank", newIfscPrefix: "CNRB" },
+  ORBC: { oldBank: "Oriental Bank of Commerce", newBank: "Punjab National Bank", newIfscPrefix: "PUNB" },
+  ANDB: { oldBank: "Andhra Bank", newBank: "Union Bank of India", newIfscPrefix: "UBIN" },
+  CORP: { oldBank: "Corporation Bank", newBank: "Union Bank of India", newIfscPrefix: "UBIN" },
+  VIJB: { oldBank: "Vijaya Bank", newBank: "Bank of Baroda", newIfscPrefix: "BARB" },
+  BKDN: { oldBank: "Dena Bank", newBank: "Bank of Baroda", newIfscPrefix: "BARB" }
+};
+
 export const VILLAGES_LIST = [
   "ASTICHAK", "BAMUNIABAR", "BARABHAGIA", "BAR BATHUARY", "BATHUARY",
   "BHANDERBERIA", "DAKSHINBAR", "DAKSHIN CHOUMUKH", "DAKSHIN PADMA",

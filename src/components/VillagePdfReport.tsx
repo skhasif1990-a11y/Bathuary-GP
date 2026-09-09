@@ -44,7 +44,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
   );
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(50);
-  const [printScope, setPrintScope] = useState<'PAGE' | 'ALL'>('ALL');
+  const [printScope, setPrintScope] = useState<'PAGE' | 'ALL'>('PAGE');
   const [printOrientation, setPrintOrientation] = useState<'PORTRAIT' | 'LANDSCAPE'>('LANDSCAPE');
 
   // Fast memoized filtering for thousands of rows
@@ -539,9 +539,9 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                 <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider text-center no-print w-36">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 text-xs print:divide-slate-400 print:text-[8pt]">
-              {/* Screen Rendering uses paginatedRows, Print uses rowsToPrint */}
-              {(printScope === 'ALL' ? filteredRows : paginatedRows).map((row, idx) => {
+            {/* SCREEN VIEW TBODY: Always renders paginatedRows for instant, ultra-fast tab switching */}
+            <tbody className="divide-y divide-slate-200 text-xs print:hidden">
+              {paginatedRows.map((row, idx) => {
                 const absoluteIndex = pageSize === -1 ? idx + 1 : (currentPage - 1) * pageSize + idx + 1;
                 const isDone = (row.colR || '').toUpperCase() === 'YES' || (row.colR || '').toUpperCase() === 'Y';
                 const isDead = (row.colT || '').toLowerCase().includes('death') || (row.colT || '').toLowerCase().includes('expired');
@@ -555,19 +555,19 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                         : isDead 
                           ? 'hover:bg-rose-50/50 bg-rose-50/20' 
                           : 'hover:bg-amber-50/50 bg-amber-50/10'
-                    } transition-colors print:bg-transparent print:break-inside-avoid`}
+                    } transition-colors`}
                   >
-                    <td className="p-2.5 sm:p-3 text-center font-bold text-slate-600 border-r border-slate-200 print:border-slate-300 print:p-1.5 print:text-black">{absoluteIndex}</td>
-                    <td className="p-2.5 sm:p-3 font-black text-slate-900 border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colB}</td>
-                    <td className="p-2.5 sm:p-3 font-mono font-black text-blue-900 border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colH}</td>
-                    <td className="p-2.5 sm:p-3 font-black text-slate-950 uppercase border-r border-slate-200 print:border-slate-300 print:p-1.5">{row.colJ}</td>
-                    <td className="p-2.5 sm:p-3 text-slate-700 uppercase font-medium border-r border-slate-200 print:border-slate-300 print:p-1.5">{row.colAG || "—"}</td>
-                    <td className="p-2.5 sm:p-3 text-slate-800 font-bold border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">{row.colV}</td>
-                    <td className="p-2.5 sm:p-3 font-mono text-slate-700 font-bold border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5 print:text-black">
+                    <td className="p-2.5 sm:p-3 text-center font-bold text-slate-600 border-r border-slate-200">{absoluteIndex}</td>
+                    <td className="p-2.5 sm:p-3 font-black text-slate-900 border-r border-slate-200 whitespace-nowrap">{row.colB}</td>
+                    <td className="p-2.5 sm:p-3 font-mono font-black text-blue-900 border-r border-slate-200 whitespace-nowrap">{row.colH}</td>
+                    <td className="p-2.5 sm:p-3 font-black text-slate-950 uppercase border-r border-slate-200">{row.colJ}</td>
+                    <td className="p-2.5 sm:p-3 text-slate-700 uppercase font-medium border-r border-slate-200">{row.colAG || "—"}</td>
+                    <td className="p-2.5 sm:p-3 text-slate-800 font-bold border-r border-slate-200 whitespace-nowrap">{row.colV}</td>
+                    <td className="p-2.5 sm:p-3 font-mono text-slate-700 font-bold border-r border-slate-200 whitespace-nowrap">
                       {row.colP ? `•••• ${row.colP.slice(-4)}` : "—"}
                     </td>
-                    <td className="p-2.5 sm:p-3 text-center border-r border-slate-200 whitespace-nowrap print:border-slate-300 print:p-1.5">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase shadow-2xs print:border print:border-black print:px-1 ${
+                    <td className="p-2.5 sm:p-3 text-center border-r border-slate-200 whitespace-nowrap">
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase shadow-2xs ${
                         isDone 
                           ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
                           : isDead 
@@ -577,7 +577,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                         {isDone ? "✓ Done" : isDead ? "Expired" : "Pending"}
                       </span>
                     </td>
-                    <td className="p-2.5 sm:p-3 text-center no-print">
+                    <td className="p-2.5 sm:p-3 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
@@ -609,6 +609,34 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                   </td>
                 </tr>
               )}
+            </tbody>
+
+            {/* PRINT VIEW TBODY: Only visible during @media print */}
+            <tbody className="hidden print:table-row-group divide-y divide-slate-400 text-[8pt] print:text-black">
+              {rowsToPrint.map((row, idx) => {
+                const absoluteIndex = printScope === 'ALL' ? idx + 1 : ((currentPage - 1) * pageSize + idx + 1);
+                const isDone = (row.colR || '').toUpperCase() === 'YES' || (row.colR || '').toUpperCase() === 'Y';
+                const isDead = (row.colT || '').toLowerCase().includes('death') || (row.colT || '').toLowerCase().includes('expired');
+
+                return (
+                  <tr key={`print-${row.colH}-${idx}`} className="print:bg-transparent print:break-inside-avoid">
+                    <td className="p-1.5 text-center font-bold text-black border-r border-slate-300">{absoluteIndex}</td>
+                    <td className="p-1.5 font-bold text-black border-r border-slate-300 whitespace-nowrap">{row.colB}</td>
+                    <td className="p-1.5 font-mono font-bold text-black border-r border-slate-300 whitespace-nowrap">{row.colH}</td>
+                    <td className="p-1.5 font-bold text-black uppercase border-r border-slate-300">{row.colJ}</td>
+                    <td className="p-1.5 text-black uppercase border-r border-slate-300">{row.colAG || "—"}</td>
+                    <td className="p-1.5 text-black font-bold border-r border-slate-300 whitespace-nowrap">{row.colV}</td>
+                    <td className="p-1.5 font-mono text-black border-r border-slate-300 whitespace-nowrap">
+                      {row.colP ? `•••• ${row.colP.slice(-4)}` : "—"}
+                    </td>
+                    <td className="p-1.5 text-center border-r border-slate-300 whitespace-nowrap">
+                      <span className="inline-block px-1.5 py-0.5 border border-black font-bold uppercase text-[7pt]">
+                        {isDone ? "Done" : isDead ? "Expired" : "Pending"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

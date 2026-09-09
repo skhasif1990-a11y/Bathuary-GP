@@ -49,17 +49,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems = [
     {
-      id: 'home',
-      label: 'Portal Home',
-      sublabel: 'Govt. Notice & Services',
-      icon: Home,
-      badge: 'Official',
-      activeGradient: 'from-emerald-600 to-teal-600 border-emerald-400/50 shadow-emerald-950/60',
-      iconColor: 'text-emerald-400',
-      activeIconBg: 'bg-emerald-700/90 text-white',
-      badgeColor: 'bg-emerald-500/30 text-emerald-200 border-emerald-400/40'
-    },
-    {
       id: 'dashboard',
       label: 'Analytics Dashboard',
       sublabel: 'Overview & 29 Villages',
@@ -113,17 +102,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       iconColor: 'text-fuchsia-400',
       activeIconBg: 'bg-fuchsia-700/90 text-white',
       badgeColor: 'bg-fuchsia-500/30 text-fuchsia-200 border-fuchsia-400/40'
-    },
-    {
-      id: 'users',
-      label: 'Staff Management',
-      sublabel: 'Authorized Field Operators',
-      icon: Users,
-      badge: 'RBAC',
-      activeGradient: 'from-sky-600 to-blue-600 border-sky-400/50 shadow-sky-950/60',
-      iconColor: 'text-sky-400',
-      activeIconBg: 'bg-sky-700/90 text-white',
-      badgeColor: 'bg-sky-500/30 text-sky-200 border-sky-400/40'
     },
     {
       id: 'deploy',

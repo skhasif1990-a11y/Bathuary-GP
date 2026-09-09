@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
+import { HomeOverview } from './components/HomeOverview';
 import { DashboardAnalytics } from './components/DashboardAnalytics';
 import { DataUpdateForm } from './components/DataUpdateForm';
 import { CitizenSearchCorner } from './components/CitizenSearchCorner';
@@ -25,7 +26,7 @@ import { FileSpreadsheet, AlertCircle, RefreshCw, CheckCircle2, ShieldCheck } fr
 
 export default function App() {
   // Navigation
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const [currentTab, setCurrentTab] = useState<string>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const language = 'en';
 
@@ -55,11 +56,12 @@ export default function App() {
   const [printRow, setPrintRow] = useState<BeneficiaryRow | null>(null);
   const [printA5Row, setPrintA5Row] = useState<BeneficiaryRow | null>(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
-  const [syncModalInitialMode, setSyncModalInitialMode] = useState<'sheetLink' | 'paste' | 'upload' | 'gas'>('gas');
+  const [syncModalInitialMode, setSyncModalInitialMode] = useState<'sheetLink' | 'paste' | 'upload'>('sheetLink');
   const [activeAuditRow, setActiveAuditRow] = useState<BeneficiaryRow | null>(null);
 
   // Syncing state
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isSheetPermanentlySaved, setIsSheetPermanentlySaved] = useState<boolean>(false);
 
   // Helper to extract and sort clean sansads from records
   const updateSansadListFromRecords = (records: BeneficiaryRow[]) => {
@@ -128,6 +130,22 @@ export default function App() {
         if (bmData.banks && Array.isArray(bmData.banks)) {
           setBankMaster(bmData.banks);
         }
+      }
+
+      // 5. Fetch Permanent Google Sheet Configuration
+      try {
+        const cfgRes = await fetch('/api/google-sheet/config');
+        if (cfgRes.ok) {
+          const cfgData = await cfgRes.json();
+          if (cfgData.isSaved && cfgData.config?.sheetUrl) {
+            setIsSheetPermanentlySaved(true);
+            safeStorage.setItem('bathuary_google_sheet_url', cfgData.config.sheetUrl);
+          } else {
+            setIsSheetPermanentlySaved(false);
+          }
+        }
+      } catch {
+        // ignore
       }
     } catch (err) {
       console.warn("Backend API not reachable yet:", err);
@@ -370,10 +388,11 @@ export default function App() {
           totalRecords: beneficiaries.length,
           villagesCount: new Set(beneficiaries.map(b => b.colV)).size
         }}
+        isPermanentlySaved={isSheetPermanentlySaved}
       />
 
       {/* RIGHT MAIN WORKSPACE (Adjusted for left sidebar) */}
-      <div className={`lg:pl-72 flex-1 flex flex-col min-h-screen w-full transition-all duration-300 ${(printRow || printA5Row) ? 'no-print' : ''}`}>
+      <div className={`lg:pl-72 flex-1 flex flex-col min-h-screen w-full transition-all duration-300 print:pl-0 print:m-0 print:w-full ${(printRow || printA5Row) ? 'no-print' : ''}`}>
         
         {/* Header with Branding and Mobile Sidebar Toggle */}
         <Header
@@ -386,14 +405,15 @@ export default function App() {
             totalRecords: beneficiaries.length,
             villagesCount: new Set(beneficiaries.map(b => b.colV)).size
           }}
+          isPermanentlySaved={isSheetPermanentlySaved}
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 print:max-w-none print:p-0 print:m-0 print:w-full">
           
           {/* Zero Dummy Data Indicator: If no Google Sheet linked yet */}
           {beneficiaries.length === 0 && (
-            <div className="mb-6 p-5 sm:p-6 bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 rounded-3xl text-white shadow-xl border border-emerald-500/30">
+            <div className="mb-6 p-5 sm:p-6 bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 rounded-3xl text-white shadow-xl border border-emerald-500/30 no-print">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="space-y-1.5 max-w-2xl">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/40">
@@ -418,6 +438,25 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB 0: Portal Home Overview */}
+          {currentTab === 'home' && (
+            <HomeOverview
+              analytics={analytics}
+              villageStats={villageStats}
+              onNavigateTab={(tab, extra) => {
+                if (extra?.category) {
+                  setCategoryFilter(extra.category);
+                }
+                if (extra?.sansad) {
+                  setSelectedSansad(extra.sansad);
+                }
+                setCurrentTab(tab);
+              }}
+              onOpenSyncModal={() => setIsSyncModalOpen(true)}
+              language={language}
+            />
+          )}
+
           {/* TAB 1: Dashboard Analytics */}
           {currentTab === 'dashboard' && (
             <DashboardAnalytics
@@ -428,6 +467,7 @@ export default function App() {
               onSansadChange={setSelectedSansad}
               onSelectCategoryReport={handleSelectCategoryReport}
               onOpenSyncModal={() => setIsSyncModalOpen(true)}
+              onNavigateToHome={() => setCurrentTab('home')}
               language={language}
             />
           )}
@@ -451,7 +491,7 @@ export default function App() {
               onPrintSlip={(row) => setPrintRow(row)}
               onPrintA5Slip={(row) => setPrintA5Row(row)}
               onOpenSyncModal={(mode) => {
-                setSyncModalInitialMode(mode || 'gas');
+                setSyncModalInitialMode(mode || 'sheetLink');
                 setIsSyncModalOpen(true);
               }}
               language={language}
@@ -463,6 +503,7 @@ export default function App() {
             <VillagePdfReport
               beneficiaries={beneficiaries}
               initialCategoryFilter={categoryFilter}
+              initialSansadFilter={selectedSansad !== 'ALL' ? selectedSansad : undefined}
               onPrintSlip={(row) => setPrintRow(row)}
               onPrintA5Slip={(row) => setPrintA5Row(row)}
               language={language}

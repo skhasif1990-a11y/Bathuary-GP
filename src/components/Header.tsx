@@ -21,6 +21,7 @@ interface HeaderProps {
     totalRecords: number;
     villagesCount: number;
   };
+  isPermanentlySaved?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,11 +30,13 @@ export const Header: React.FC<HeaderProps> = ({
   isSyncing,
   onRefreshData,
   onOpenSyncModal,
-  syncedSheetInfo
+  syncedSheetInfo,
+  isPermanentlySaved
 }) => {
   // English title based on active tab
   const getTabTitle = (tab: string) => {
     switch (tab) {
+      case 'home': return 'Bathuary GP Citizen Portal & Home';
       case 'dashboard': return 'Dashboard & Analytics';
       case 'search': return 'Citizen Search Corner';
       case 'dataForm': return 'Data Update Form';
@@ -93,11 +96,15 @@ export const Header: React.FC<HeaderProps> = ({
               id="header-link-sheet-btn"
               onClick={onOpenSyncModal}
               className="flex items-center gap-1.5 text-white btn-3d-save px-3.5 py-1.5 rounded-xl font-bold cursor-pointer"
-              title="Auto-Link Google Sheet or upload master Excel"
+              title={isPermanentlySaved ? "Google Sheet permanently saved in server" : "Auto-Link Google Sheet or upload master Excel"}
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">⚡ LINK GOOGLE SHEET</span>
-              <span className="sm:hidden">LINK SHEET</span>
+              <span className="hidden sm:inline">
+                {isPermanentlySaved ? "💾 SHEET SAVED (PERMANENT)" : "⚡ LINK GOOGLE SHEET"}
+              </span>
+              <span className="sm:hidden">
+                {isPermanentlySaved ? "💾 PERMANENT" : "LINK SHEET"}
+              </span>
             </button>
 
             <button

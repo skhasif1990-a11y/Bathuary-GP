@@ -1,6 +1,8 @@
 import React from 'react';
 import { 
-  BarChart3, 
+  Home,
+  LayoutDashboard,
+  BarChart3,
   Search, 
   UserCheck, 
   FileText, 
@@ -13,7 +15,8 @@ import {
   ExternalLink,
   Layers,
   Database,
-  ShieldCheck
+  ShieldCheck,
+  Link2
 } from 'lucide-react';
 import { NationalEmblemLogo, VbGramGActLogo } from './Emblems';
 
@@ -30,6 +33,7 @@ interface SidebarProps {
     villagesCount: number;
     lastSyncTimestamp?: string;
   };
+  isPermanentlySaved?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -40,15 +44,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isSyncing,
   onRefreshData,
   onOpenSyncModal,
-  syncedSheetInfo
+  syncedSheetInfo,
+  isPermanentlySaved
 }) => {
   const navItems = [
     {
+      id: 'home',
+      label: 'Portal Home',
+      sublabel: 'Govt. Notice & Services',
+      icon: Home,
+      badge: 'Official'
+    },
+    {
       id: 'dashboard',
-      label: 'Dashboard Analytics',
-      sublabel: '29 Canonical Villages',
+      label: 'Analytics Dashboard',
+      sublabel: 'Overview & 29 Villages',
       icon: BarChart3,
-      badge: '29 Villages'
+      badge: 'Live'
     },
     {
       id: 'search',
@@ -97,10 +109,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* Main Sidebar Container */}
+      {/* Main Sidebar Container - strictly w-72 matching workspace lg:pl-72 */}
       <aside 
         id="app-left-sidebar"
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 sm:w-80 bg-[#0B132B] text-slate-100 flex flex-col border-r border-slate-800 shadow-2xl transition-transform duration-300 ease-in-out lg:translate-x-0 no-print ${
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-[#0B132B] text-slate-100 flex flex-col border-r border-slate-800 shadow-2xl transition-transform duration-300 ease-in-out lg:translate-x-0 no-print ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -203,7 +215,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
               <span className="text-[11px] font-bold text-slate-200">Google Sheet Status</span>
             </div>
-            {syncedSheetInfo && syncedSheetInfo.totalRecords > 0 ? (
+            {isPermanentlySaved ? (
+              <span className="text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-600/70 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Permanent Live
+              </span>
+            ) : syncedSheetInfo && syncedSheetInfo.totalRecords > 0 ? (
               <span className="text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.5 rounded-full flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 Live
@@ -224,6 +241,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <p className="text-[10px] text-slate-400">
                   {syncedSheetInfo.villagesCount} of 29 Villages Synced
                 </p>
+                {isPermanentlySaved && (
+                  <p className="text-[9px] text-emerald-400/90 font-medium pt-0.5">
+                    ✓ Permanent Server Config Active
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-slate-400 text-[10px] leading-relaxed">
@@ -232,7 +254,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          <div>
+          <div className="space-y-1.5">
             <button
               id="sidebar-refresh-btn"
               onClick={onRefreshData}
@@ -241,6 +263,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-200' : ''}`} />
               <span>{isSyncing ? 'Syncing Live Sheet...' : 'Refresh Sheet Data'}</span>
+            </button>
+            <button
+              id="sidebar-sheet-link-btn"
+              onClick={onOpenSyncModal}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-emerald-300 font-bold text-[11px] border border-slate-700/80 transition-colors cursor-pointer"
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              <span>Connect / Update Sheet Link</span>
             </button>
           </div>
         </div>

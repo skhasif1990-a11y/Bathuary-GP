@@ -21,6 +21,7 @@ interface DashboardProps {
   onSansadChange: (sansad: string) => void;
   onSelectCategoryReport: (type: 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH') => void;
   onOpenSyncModal?: () => void;
+  onNavigateToHome?: () => void;
   language?: 'bn' | 'en';
 }
 
@@ -31,10 +32,37 @@ export const DashboardAnalytics: React.FC<DashboardProps> = ({
   selectedSansad,
   onSansadChange,
   onSelectCategoryReport,
-  onOpenSyncModal
+  onOpenSyncModal,
+  onNavigateToHome
 }) => {
   return (
     <div className="space-y-6">
+      {/* Top View Selector: Home Portal vs Analytics Dashboard */}
+      {onNavigateToHome && (
+        <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onNavigateToHome}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-emerald-700 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <span>🏠</span>
+              <span>Home Portal Overview</span>
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl text-xs font-black bg-emerald-600 text-white shadow-xs flex items-center gap-2 cursor-default"
+            >
+              <span>📊</span>
+              <span>Analytics Dashboard (Live)</span>
+            </button>
+          </div>
+          <span className="text-xs text-slate-500 font-medium hidden md:inline">
+            Real-time Job Card & e-KYC Monitoring
+          </span>
+        </div>
+      )}
+
       {/* Top Banner with Sansad Selector */}
       <div className="rounded-3xl bg-white border border-slate-200 p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">

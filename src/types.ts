@@ -36,6 +36,10 @@ export interface BankMasterItem {
   bank: string;
   branch: string;
   ifsc: string;
+  district?: string;
+  isMerged?: boolean;
+  mergedBank?: string;
+  legacyIfsc?: string;
 }
 
 export interface AppUser {
@@ -88,4 +92,15 @@ export interface VillageStat {
   done: number;
   pending: number;
   death: number;
+}
+
+export interface GoogleSheetConfig {
+  sheetUrl: string;
+  autoSync: boolean;
+  lastSyncTimestamp: string;
+  totalRecords: number;
+  villagesCount: number;
+  sansadsCount: number;
+  savedAt: string;
+  updatedAt: string;
 }

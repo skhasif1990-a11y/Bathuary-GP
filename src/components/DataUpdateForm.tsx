@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BeneficiaryRow, BankMasterItem, AppUser } from '../types';
-import { VILLAGES_LIST, OFFICERS_LIST } from '../data/bankMaster';
+import { VILLAGES_LIST, OFFICERS_LIST, canonicalizeBankName, LEGACY_IFSC_UPGRADE_MAP } from '../data/bankMaster';
 import { formatKycDate } from '../utils/dateFormatter';
 
 interface DataUpdateFormProps {
@@ -27,7 +27,7 @@ interface DataUpdateFormProps {
   onSaveRecord: (data: Partial<BeneficiaryRow>) => Promise<{ success: boolean; googleSheetSynced?: boolean; googleSheetMessage?: string } | boolean>;
   onPrintSlip: (row: BeneficiaryRow) => void;
   onPrintA5Slip: (row: BeneficiaryRow) => void;
-  onOpenSyncModal?: (mode?: 'sheetLink' | 'paste' | 'upload' | 'gas') => void;
+  onOpenSyncModal?: (mode?: 'sheetLink' | 'paste' | 'upload') => void;
   language?: 'bn' | 'en';
 }
 
@@ -91,6 +91,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [mergerNotice, setMergerNotice] = useState<string>('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Filtered Job Cards & Applicants
@@ -121,7 +122,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
       .slice(0, 25);
   }, [beneficiaries, aadhaarSearch]);
 
-  // Standard RBI 4-letter IFSC Bank Map for instant auto-resolution
+  // Standard RBI 4-letter IFSC Bank Map for instant auto-resolution (includes merged entities)
   const RBI_BANK_PREFIX_MAP: Record<string, string> = {
     BKID: 'BANK OF INDIA',
     SBIN: 'STATE BANK OF INDIA',
@@ -140,17 +141,65 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
     KKBK: 'KOTAK MAHINDRA BANK',
     WBSC: 'WEST BENGAL STATE COOP BANK',
     AIRP: 'AIRTEL PAYMENTS BANK',
-    IPOS: 'INDIA POST PAYMENTS BANK'
+    IPOS: 'INDIA POST PAYMENTS BANK',
+    IBKL: 'IDBI BANK',
+    ALLA: 'INDIAN BANK',
+    UTBI: 'PUNJAB NATIONAL BANK',
+    ORBC: 'PUNJAB NATIONAL BANK',
+    SYNB: 'CANARA BANK',
+    ANDB: 'UNION BANK OF INDIA',
+    CORP: 'UNION BANK OF INDIA',
+    BKDN: 'BANK OF BARODA',
+    VIJB: 'BANK OF BARODA'
   };
 
-  // Bank master lists (always includes currently active bank)
-  const uniqueBanks = Array.from(
-    new Set([...bankMaster.map(b => b.bank), formData.colAO].filter(Boolean))
-  ).sort();
+  // Bank master lists (canonicalized and sorted)
+  const uniqueBanks = useMemo(() => {
+    const rawList = [
+      'STATE BANK OF INDIA',
+      'INDIA POST PAYMENTS BANK',
+      'BANK OF INDIA',
+      'PUNJAB NATIONAL BANK',
+      'BANGIYA GRAMIN VIKASH BANK',
+      'INDIAN BANK',
+      'CANARA BANK',
+      'UNION BANK OF INDIA',
+      'BANK OF BARODA',
+      'BALAGERIA CENTRAL CO-OPERATIVE BANK',
+      'MUGBERIA CENTRAL CO-OPERATIVE BANK',
+      'PASCHIM BANGA GRAMIN BANK',
+      'UCO BANK',
+      'CENTRAL BANK OF INDIA',
+      'AXIS BANK',
+      'HDFC BANK',
+      'ICICI BANK',
+      'IDBI BANK',
+      'BANDHAN BANK',
+      'INDIAN OVERSEAS BANK',
+      'AIRTEL PAYMENTS BANK',
+      ...bankMaster.map(b => b.bank),
+      formData.colAO
+    ].filter(Boolean);
 
-  const availableIfscs = bankMaster
-    .filter(b => !formData.colAO || (b.bank && b.bank.toUpperCase() === String(formData.colAO).toUpperCase()))
-    .map(b => b.ifsc);
+    return Array.from(new Set(rawList.map(b => canonicalizeBankName(b)))).sort();
+  }, [bankMaster, formData.colAO]);
+
+  const availableIfscs = useMemo(() => {
+    if (!formData.colAO) return bankMaster.map(b => b.ifsc);
+    const canonical = canonicalizeBankName(formData.colAO);
+    return bankMaster
+      .filter(b => canonicalizeBankName(b.bank) === canonical || b.bank.toUpperCase() === formData.colAO.toUpperCase())
+      .map(b => b.ifsc);
+  }, [bankMaster, formData.colAO]);
+
+  const availableBranches = useMemo(() => {
+    if (!formData.colAO) return [];
+    const canonical = canonicalizeBankName(formData.colAO);
+    return bankMaster.filter(b => {
+      const bCanonical = canonicalizeBankName(b.bank);
+      return bCanonical === canonical || b.bank.toUpperCase() === formData.colAO.toUpperCase();
+    });
+  }, [bankMaster, formData.colAO]);
 
   // Sync selected record when Applicant changes
   useEffect(() => {
@@ -173,11 +222,34 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           resolvedBranch = temp;
         }
 
+        // Auto-upgrade legacy merged IFSC (e.g. ALLA0212824 -> IDIB000E503, UTBI0EGR276 -> PUNB0019020)
+        if (LEGACY_IFSC_UPGRADE_MAP[resolvedIfsc]) {
+          const up = LEGACY_IFSC_UPGRADE_MAP[resolvedIfsc];
+          resolvedIfsc = up.newIfsc;
+          resolvedBank = up.newBank;
+          if (!resolvedBranch || resolvedBranch === '—') resolvedBranch = up.branch;
+          setMergerNotice(`Legacy IFSC recognized (${up.reason}): Auto-updated to ${up.newBank} (IFSC: ${up.newIfsc}, Branch: ${up.branch})`);
+        } else {
+          setMergerNotice('');
+        }
+
+        // Canonicalize Bank name (e.g. IPPB / INDIAN POST -> INDIA POST PAYMENTS BANK, SBI -> STATE BANK OF INDIA)
+        if (resolvedBank) {
+          resolvedBank = canonicalizeBankName(resolvedBank);
+        }
+
         // Auto-fill from bankMaster if IFSC is recognized
         const matchedBank = bankMaster.find(b => b.ifsc.toUpperCase() === resolvedIfsc);
         if (matchedBank) {
           if (!resolvedBank || resolvedBank === '—') resolvedBank = matchedBank.bank;
-          if (!resolvedBranch || resolvedBranch === '—') resolvedBranch = matchedBank.branch;
+          if (!resolvedBranch || resolvedBranch === '—') {
+            resolvedBranch = matchedBank.branch;
+          }
+        }
+
+        // If IPPB and branch is missing, set default Bathuary/Egra branch
+        if (resolvedBank === 'INDIA POST PAYMENTS BANK' && (!resolvedBranch || resolvedBranch === '—' || resolvedBranch.includes('PROCESSING'))) {
+          resolvedBranch = 'BATHUARY BO';
         }
 
         const formattedKyc = formatKycDate(match.colS);
@@ -260,10 +332,38 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
     }
   };
 
-  // IFSC Change -> Auto Fill Bank & Branch (Master + RBI 4-letter prefix + Razorpay API)
+  // IFSC Change -> Auto Fill Bank & Branch (Merged Banks + Master + RBI 4-letter prefix + Razorpay API)
   const handleIfscChange = (ifsc: string) => {
     const clean = ifsc.trim().toUpperCase();
-    
+    setMergerNotice('');
+
+    // 0. Check legacy merged IFSC mapping (e.g. ALLA0212824 -> IDIB000E503, UTBI0EGR276 -> PUNB0019020)
+    if (LEGACY_IFSC_UPGRADE_MAP[clean]) {
+      const upgrade = LEGACY_IFSC_UPGRADE_MAP[clean];
+      setFormData(prev => ({
+        ...prev,
+        colAP: upgrade.newIfsc,
+        colAO: upgrade.newBank,
+        colAQ: upgrade.branch
+      }));
+      setMergerNotice(`Legacy IFSC recognized: ${clean} (${upgrade.reason}). Auto-updated to ${upgrade.newBank} (IFSC: ${upgrade.newIfsc}, Branch: ${upgrade.branch}).`);
+      return;
+    }
+
+    // Special handling for IPPB (IPOS0000001) to preserve valid postal branch
+    if (clean === 'IPOS0000001') {
+      setFormData(prev => {
+        const keepBranch = prev.colAQ && prev.colAQ !== '—' && !prev.colAQ.includes('PROCESSING') ? prev.colAQ : 'BATHUARY BO';
+        return {
+          ...prev,
+          colAP: 'IPOS0000001',
+          colAO: 'INDIA POST PAYMENTS BANK',
+          colAQ: keepBranch
+        };
+      });
+      return;
+    }
+
     // 1. Check local bankMaster
     const item = bankMaster.find(b => b.ifsc.toUpperCase() === clean);
     if (item) {
@@ -276,14 +376,14 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
       return;
     }
 
-    // 2. Immediate RBI 4-letter Bank Prefix resolution (e.g. BKID -> BANK OF INDIA)
+    // 2. Immediate RBI 4-letter Bank Prefix resolution
     const prefix = clean.slice(0, 4);
     const resolvedBank = RBI_BANK_PREFIX_MAP[prefix] || '';
 
     setFormData(prev => ({
       ...prev,
       colAP: clean,
-      colAO: resolvedBank || prev.colAO
+      colAO: resolvedBank ? canonicalizeBankName(resolvedBank) : prev.colAO
     }));
 
     // 3. Live open IFSC lookup when 11 characters are entered
@@ -292,11 +392,12 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
         .then(res => (res.ok ? res.json() : null))
         .then(data => {
           if (data && data.BANK) {
+            const isIppb = clean === 'IPOS0000001' || String(data.BANK).toUpperCase().includes('POST');
             setFormData(prev => ({
               ...prev,
               colAP: clean,
-              colAO: data.BANK ? String(data.BANK).toUpperCase() : (resolvedBank || prev.colAO),
-              colAQ: data.BRANCH ? String(data.BRANCH).toUpperCase() : prev.colAQ
+              colAO: canonicalizeBankName(data.BANK ? String(data.BANK).toUpperCase() : (resolvedBank || prev.colAO)),
+              colAQ: isIppb ? (prev.colAQ || 'BATHUARY BO') : (data.BRANCH ? String(data.BRANCH).toUpperCase() : prev.colAQ)
             }));
           }
         })
@@ -306,12 +407,40 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
 
   // Bank Change -> Auto select IFSC & Branch if available
   const handleBankChange = (bank: string) => {
-    const matches = bankMaster.filter(b => b.bank.toUpperCase() === bank.toUpperCase());
+    const canonical = canonicalizeBankName(bank);
+    const matches = bankMaster.filter(b => canonicalizeBankName(b.bank) === canonical);
+    const existingBranchMatch = matches.find(m => m.branch.toUpperCase() === (formData.colAQ || '').toUpperCase());
+
+    let defaultBranch = existingBranchMatch ? existingBranchMatch.branch : (matches.length > 0 ? matches[0].branch : (formData.colAQ || ''));
+    let defaultIfsc = existingBranchMatch ? existingBranchMatch.ifsc : (matches.length > 0 ? matches[0].ifsc : formData.colAP);
+
+    if (canonical === 'INDIA POST PAYMENTS BANK') {
+      defaultIfsc = 'IPOS0000001';
+      if (!existingBranchMatch) {
+        defaultBranch = formData.colAQ && formData.colAQ !== '—' && !formData.colAQ.includes('PROCESSING') ? formData.colAQ : 'BATHUARY BO';
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
-      colAO: bank,
-      colAP: matches.length > 0 ? matches[0].ifsc : prev.colAP,
-      colAQ: matches.length > 0 ? matches[0].branch : prev.colAQ
+      colAO: canonical,
+      colAP: defaultIfsc,
+      colAQ: defaultBranch
+    }));
+  };
+
+  // Branch Change -> Auto select matching verified IFSC
+  const handleBranchChange = (branch: string) => {
+    const cleanBranch = branch.trim().toUpperCase();
+    const canonical = canonicalizeBankName(formData.colAO);
+    const bankMatches = bankMaster.filter(b => canonicalizeBankName(b.bank) === canonical);
+    const match = bankMatches.find(b => b.branch.toUpperCase() === cleanBranch) || bankMaster.find(b => b.branch.toUpperCase() === cleanBranch);
+
+    setFormData(prev => ({
+      ...prev,
+      colAQ: cleanBranch,
+      colAP: match ? match.ifsc : (canonical === 'INDIA POST PAYMENTS BANK' ? 'IPOS0000001' : prev.colAP),
+      colAO: match ? canonicalizeBankName(match.bank) : (canonical || prev.colAO)
     }));
   };
 
@@ -436,9 +565,9 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           {onOpenSyncModal && (
             <button
               type="button"
-              onClick={() => onOpenSyncModal('gas')}
+              onClick={() => onOpenSyncModal('sheetLink')}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold transition-all cursor-pointer self-start sm:self-auto shadow-xs"
-              title="Click to check or configure Google Sheet 2-Way Live Auto-Sync"
+              title="Click to check or configure Google Sheet Live Sync"
             >
               <Zap className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
               <span>Google Sheet Live Sync</span>
@@ -885,12 +1014,26 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
 
           {/* Section 3: Bank Details (Col AO - Col AR) with Merger Normalization */}
           <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <h4 className="text-sm sm:text-base font-extrabold text-slate-800">
-                Bank Account Details (Col AO - Col AR)
-              </h4>
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <h4 className="text-sm sm:text-base font-extrabold text-slate-800">
+                  Bank Account Details (Col AO - Col AR)
+                </h4>
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                RBI & WB Master Verified
+              </span>
             </div>
+
+            {mergerNotice && (
+              <div className="mb-4 flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                <Zap className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="font-medium leading-relaxed">
+                  <span className="font-bold">RBI Bank Merger / Code Resolution:</span> {mergerNotice}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Col AP: IFSC Code (Auto-fills Bank and Branch) */}
@@ -914,7 +1057,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                       <option value={formData.colAP}>{formData.colAP} — Current Record IFSC</option>
                     )}
                     {bankMaster.map(item => (
-                      <option key={item.ifsc} value={item.ifsc}>
+                      <option key={`${item.bank}-${item.branch}-${item.ifsc}`} value={item.ifsc}>
                         {item.ifsc} — {item.bank} ({item.branch})
                       </option>
                     ))}
@@ -966,17 +1109,33 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                   <span>Branch Name (Col AQ):</span>
                   {formData.colAQ && (
                     <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      ✓ Auto-filled
+                      ✓ Verified Branch
                     </span>
                   )}
                 </label>
-                <input
-                  type="text"
-                  value={formData.colAQ}
-                  onChange={(e) => setFormData({ ...formData, colAQ: e.target.value.toUpperCase() })}
-                  placeholder="Auto-filled on IFSC select"
-                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:bg-white focus:border-emerald-500 focus:outline-none transition-all uppercase"
-                />
+                <div className="space-y-1.5">
+                  {availableBranches.length > 0 && (
+                    <select
+                      value={formData.colAQ}
+                      onChange={(e) => handleBranchChange(e.target.value)}
+                      className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer"
+                    >
+                      <option value="">-- Choose Branch ({availableBranches.length} verified) --</option>
+                      {availableBranches.map(b => (
+                        <option key={`${b.bank}-${b.branch}-${b.ifsc}`} value={b.branch}>
+                          {b.branch} — (IFSC: {b.ifsc})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    type="text"
+                    value={formData.colAQ}
+                    onChange={(e) => handleBranchChange(e.target.value.toUpperCase())}
+                    placeholder="Auto-filled on IFSC select or type branch"
+                    className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2 border border-slate-300 focus:bg-white focus:border-emerald-500 focus:outline-none transition-all uppercase"
+                  />
+                </div>
               </div>
 
               {/* Col AR: Account Number */}

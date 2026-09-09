@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -7,7 +8,7 @@ import * as XLSX from "xlsx";
 import { INITIAL_BENEFICIARIES } from "./src/data/initialRecords";
 import { INITIAL_USERS } from "./src/data/initialUsers";
 import { INITIAL_BANK_MASTER, VILLAGES_LIST } from "./src/data/bankMaster";
-import { BeneficiaryRow, AppUser, AuditLog } from "./src/types";
+import { BeneficiaryRow, AppUser, AuditLog, GoogleSheetConfig } from "./src/types";
 import { normalizeVillageName, CANONICAL_29_VILLAGES } from "./src/utils/villageNormalizer";
 import { normalizeSansadName, CANONICAL_16_SANSADS, isHeaderOrJunkSansad, sortSansads } from "./src/utils/sansadNormalizer";
 import { formatKycDate } from "./src/utils/dateFormatter";
@@ -16,19 +17,98 @@ dotenv.config();
 
 const app = express();
 const PORT = 3000;
-let activeAppsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL || "";
 
-// In-Memory Database / Cache
-let beneficiariesCache: BeneficiaryRow[] = [...INITIAL_BENEFICIARIES];
+// Persistent Configuration and Cache File Paths
+const CONFIG_FILE_PATH = path.join(process.cwd(), "google_sheet_config.json");
+const BENEFICIARIES_FILE_PATH = path.join(process.cwd(), "beneficiaries_cache.json");
+
+function loadSavedSheetConfig(): GoogleSheetConfig {
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const raw = fs.readFileSync(CONFIG_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(raw);
+      return {
+        sheetUrl: parsed.sheetUrl || "",
+        autoSync: parsed.autoSync !== false,
+        lastSyncTimestamp: parsed.lastSyncTimestamp || "",
+        totalRecords: Number(parsed.totalRecords || 0),
+        villagesCount: Number(parsed.villagesCount || 0),
+        sansadsCount: Number(parsed.sansadsCount || 0),
+        savedAt: parsed.savedAt || "",
+        updatedAt: parsed.updatedAt || ""
+      };
+    }
+  } catch (err) {
+    console.error("Failed to read google_sheet_config.json:", err);
+  }
+  return {
+    sheetUrl: "",
+    autoSync: true,
+    lastSyncTimestamp: "",
+    totalRecords: 0,
+    villagesCount: 0,
+    sansadsCount: 0,
+    savedAt: "",
+    updatedAt: ""
+  };
+}
+
+function saveSheetConfig(config: Partial<GoogleSheetConfig>): GoogleSheetConfig {
+  const existing = loadSavedSheetConfig();
+  const updated: GoogleSheetConfig = {
+    ...existing,
+    ...config,
+    updatedAt: new Date().toISOString()
+  };
+  if (!updated.savedAt && updated.sheetUrl) {
+    updated.savedAt = new Date().toISOString();
+  }
+  try {
+    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(updated, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to write google_sheet_config.json:", err);
+  }
+  return updated;
+}
+
+function loadSavedBeneficiaries(): BeneficiaryRow[] | null {
+  try {
+    if (fs.existsSync(BENEFICIARIES_FILE_PATH)) {
+      const raw = fs.readFileSync(BENEFICIARIES_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load cached beneficiaries from disk:", err);
+  }
+  return null;
+}
+
+function saveBeneficiariesToDisk(data: BeneficiaryRow[]) {
+  try {
+    fs.writeFileSync(BENEFICIARIES_FILE_PATH, JSON.stringify(data), "utf-8");
+  } catch (err) {
+    console.error("Failed to save beneficiaries to disk:", err);
+  }
+}
+
+// In-Memory Database / Cache initialized from permanent disk storage if available
+const initialDiskConfig = loadSavedSheetConfig();
+const diskBeneficiaries = loadSavedBeneficiaries();
+
+let beneficiariesCache: BeneficiaryRow[] = (diskBeneficiaries && diskBeneficiaries.length > 0)
+  ? diskBeneficiaries
+  : [...INITIAL_BENEFICIARIES];
 let usersCache: AppUser[] = [...INITIAL_USERS];
 let auditLogsCache: AuditLog[] = [];
-let activeSyncedSheetUrl: string = "";
+let activeSyncedSheetUrl: string = initialDiskConfig.sheetUrl || "";
+let lastSyncTimestamp: string = initialDiskConfig.lastSyncTimestamp || "";
 
 // System Metrics
 const serverStartTime = Date.now();
 let totalApiRequests = 0;
-let lastSyncTimestamp = "";
-let googleScriptConnected = false;
 
 /**
  * Intelligent AI & Heuristic Parser for Google Sheet & Excel rows
@@ -263,23 +343,290 @@ app.get("/api/health", (req: Request, res: Response) => {
     totalRequests: totalApiRequests,
     totalBeneficiaries: beneficiariesCache.length,
     usersCount: usersCache.length,
-    googleScriptConnected,
     lastSyncTimestamp,
     memoryUsage: process.memoryUsage()
   });
 });
 
 // ----------------------------------------------------------------------------
-// Google Sheet Live Sync & Proxy Endpoints (Solves CORS and permissions)
+/**
+ * Core Google Sheet Fetcher & Parser
+ * Handles public links, export CSV, gviz endpoints, and auth redirects
+ */
+async function fetchAndParseGoogleSheet(rawUrl: string): Promise<{
+  beneficiaries: BeneficiaryRow[];
+  uniqueVillages: string[];
+  uniqueSansads: string[];
+  sheetId: string;
+}> {
+  const trimmedUrl = rawUrl.trim();
+
+  if (trimmedUrl.includes("script.google.com")) {
+    throw new Error("You provided a Google Apps Script link. Please use your Google Spreadsheet link (https://docs.google.com/spreadsheets/d/.../edit).");
+  }
+
+  // 1. Extract GID (Sheet tab)
+  let gid = "0";
+  const gidMatch = trimmedUrl.match(/[#&?]gid=([0-9]+)/);
+  if (gidMatch) {
+    gid = gidMatch[1];
+  }
+
+  // 2. Extract Document ID or Web Publish ID
+  let sheetId = "";
+  const pubMatch = trimmedUrl.match(/\/spreadsheets\/d\/e\/([a-zA-Z0-9-_]+)/);
+  const docMatch = trimmedUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+
+  if (pubMatch) {
+    sheetId = pubMatch[1];
+  } else if (docMatch) {
+    sheetId = docMatch[1];
+  } else {
+    sheetId = trimmedUrl;
+  }
+
+  if (!sheetId || sheetId.length < 8) {
+    throw new Error("Invalid Google Sheet link. Please copy the full link from your browser address bar (e.g. https://docs.google.com/spreadsheets/d/.../edit).");
+  }
+
+  // URLs to try in priority order
+  const candidateUrls = pubMatch 
+    ? [
+        `https://docs.google.com/spreadsheets/d/e/${sheetId}/pub?output=csv&gid=${gid}`,
+        `https://docs.google.com/spreadsheets/d/e/${sheetId}/pub?output=csv`
+      ]
+    : [
+        `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`,
+        `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`
+      ];
+
+  let csvContent = "";
+  let isHtmlAuthPage = false;
+  let lastError = "";
+
+  for (const url of candidateUrls) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/csv,text/plain,*/*"
+        },
+        redirect: "follow"
+      });
+      clearTimeout(timer);
+
+      if (response.ok) {
+        const bodyText = await response.text();
+        if (bodyText.includes("<html") || bodyText.includes("<!DOCTYPE") || bodyText.includes("accounts.google.com")) {
+          isHtmlAuthPage = true;
+          lastError = 'Could not access Google Sheet. Please check "Share" > "Anyone with the link can view".';
+          continue;
+        }
+
+        if (bodyText.trim().length > 20) {
+          csvContent = bodyText;
+          break;
+        }
+      } else {
+        lastError = `HTTP ${response.status}: ${response.statusText}`;
+      }
+    } catch (fetchErr: any) {
+      lastError = fetchErr.message;
+    }
+  }
+
+  if (!csvContent) {
+    throw new Error(
+      isHtmlAuthPage
+        ? 'Could not access Google Sheet. Please click "Share" on your Google Sheet and set "Anyone with the link can view".'
+        : (lastError || 'Could not connect to Google Sheet. Please verify link and internet connectivity.')
+    );
+  }
+
+  // Parse the fetched CSV data
+  const workbook = XLSX.read(csvContent, { type: "string" });
+  const sheetName = workbook.SheetNames[0];
+  const sheetData: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+
+  const beneficiaries = parseAndMapSheetRows(sheetData);
+
+  if (beneficiaries.length === 0) {
+    throw new Error("Google Sheet was reached, but no Job Card records were found. Please verify column headers.");
+  }
+
+  const uniqueVillages = Array.from(new Set(beneficiaries.map(b => b.colV))).filter(Boolean);
+  const uniqueSansads = sortSansads(
+    Array.from(new Set(beneficiaries.map(b => b.colB)))
+      .filter(s => s && !isHeaderOrJunkSansad(s))
+  );
+
+  return {
+    beneficiaries,
+    uniqueVillages,
+    uniqueSansads,
+    sheetId
+  };
+}
+
+// Background startup sync
+if (initialDiskConfig.sheetUrl && initialDiskConfig.autoSync !== false) {
+  setTimeout(async () => {
+    try {
+      console.log(`[Auto-Sync] Attempting background sync from permanent Google Sheet: ${initialDiskConfig.sheetUrl}`);
+      const res = await fetchAndParseGoogleSheet(initialDiskConfig.sheetUrl);
+      if (res.beneficiaries && res.beneficiaries.length > 0) {
+        beneficiariesCache = res.beneficiaries;
+        lastSyncTimestamp = new Date().toISOString();
+        saveBeneficiariesToDisk(beneficiariesCache);
+        saveSheetConfig({
+          lastSyncTimestamp,
+          totalRecords: beneficiariesCache.length,
+          villagesCount: res.uniqueVillages.length,
+          sansadsCount: res.uniqueSansads.length
+        });
+        console.log(`[Auto-Sync] Successfully loaded ${beneficiariesCache.length} records on startup.`);
+      }
+    } catch (err: any) {
+      console.warn("[Auto-Sync] Startup background sync notice:", err.message);
+    }
+  }, 2500);
+}
+
+// ----------------------------------------------------------------------------
+// Google Sheet Live Sync & Permanent Persistence Endpoints
 // ----------------------------------------------------------------------------
 app.get("/api/google-sheet/status", (req: Request, res: Response) => {
+  const cfg = loadSavedSheetConfig();
   res.json({
     status: "success",
-    syncedSheetUrl: activeSyncedSheetUrl,
+    syncedSheetUrl: activeSyncedSheetUrl || cfg.sheetUrl || "",
+    isSaved: !!(cfg.sheetUrl && cfg.sheetUrl.trim().length > 0),
     totalRecords: beneficiariesCache.length,
     villagesCount: new Set(beneficiariesCache.map(b => b.colV)).size,
-    lastSyncTimestamp
+    lastSyncTimestamp: lastSyncTimestamp || cfg.lastSyncTimestamp || ""
   });
+});
+
+app.get("/api/google-sheet/config", (req: Request, res: Response) => {
+  const cfg = loadSavedSheetConfig();
+  res.json({
+    status: "success",
+    isSaved: !!(cfg.sheetUrl && cfg.sheetUrl.trim().length > 0),
+    config: {
+      ...cfg,
+      sheetUrl: activeSyncedSheetUrl || cfg.sheetUrl || "",
+      lastSyncTimestamp: lastSyncTimestamp || cfg.lastSyncTimestamp || "",
+      totalRecords: beneficiariesCache.length,
+      villagesCount: new Set(beneficiariesCache.map(b => b.colV)).size,
+      sansadsCount: new Set(beneficiariesCache.map(b => b.colB)).size
+    }
+  });
+});
+
+// Permanent Save Endpoint
+app.post("/api/google-sheet/save-link", async (req: Request, res: Response) => {
+  try {
+    const { sheetUrl, autoSync = true, syncNow = true } = req.body;
+    if (!sheetUrl || typeof sheetUrl !== "string" || sheetUrl.trim().length < 8) {
+      return res.status(400).json({
+        status: "error",
+        message: "অনুগ্রহ করে একটি সঠিক গুগল স্প্রেডশীট লিঙ্ক দিন (Please provide a valid Google Sheet URL)."
+      });
+    }
+
+    const trimmedUrl = sheetUrl.trim();
+
+    // Persist configuration to disk immediately
+    saveSheetConfig({
+      sheetUrl: trimmedUrl,
+      autoSync: autoSync !== false
+    });
+    activeSyncedSheetUrl = trimmedUrl;
+
+    if (syncNow) {
+      const syncResult = await fetchAndParseGoogleSheet(trimmedUrl);
+      beneficiariesCache = syncResult.beneficiaries;
+      lastSyncTimestamp = new Date().toISOString();
+
+      saveBeneficiariesToDisk(beneficiariesCache);
+      const updatedConfig = saveSheetConfig({
+        sheetUrl: trimmedUrl,
+        autoSync: autoSync !== false,
+        lastSyncTimestamp,
+        totalRecords: beneficiariesCache.length,
+        villagesCount: syncResult.uniqueVillages.length,
+        sansadsCount: syncResult.uniqueSansads.length
+      });
+
+      auditLogsCache.unshift({
+        timestamp: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+        jobCardNumber: `GSHEET-PERMANENT-SAVED`,
+        beneficiaryName: `Permanent Sheet: ${beneficiariesCache.length} Records Saved`,
+        updatedBy: "Google Sheet Permanent Save"
+      });
+
+      return res.json({
+        status: "success",
+        message: `গুগল শীট লিঙ্ক স্থায়ীভাবে সেভ ও লাইভ সিঙ্ক সফল হয়েছে! মোট ${beneficiariesCache.length} জন নাগরিকের তথ্য সংরক্ষিত।`,
+        isSaved: true,
+        config: updatedConfig,
+        total: beneficiariesCache.length,
+        villagesCount: syncResult.uniqueVillages.length,
+        sansadsCount: syncResult.uniqueSansads.length,
+        beneficiaries: beneficiariesCache
+      });
+    } else {
+      const updatedConfig = loadSavedSheetConfig();
+      return res.json({
+        status: "success",
+        message: "গুগল শীট লিঙ্ক স্থায়ীভাবে সংরক্ষণ করা হয়েছে (Google Sheet link permanently saved).",
+        isSaved: true,
+        config: updatedConfig
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({
+      status: "error",
+      message: err.message || "Failed to save Google Sheet link"
+    });
+  }
+});
+
+// Clear Permanent Link
+app.post("/api/google-sheet/clear-link", (req: Request, res: Response) => {
+  try {
+    saveSheetConfig({
+      sheetUrl: "",
+      totalRecords: 0,
+      villagesCount: 0,
+      sansadsCount: 0,
+      lastSyncTimestamp: ""
+    });
+    activeSyncedSheetUrl = "";
+
+    auditLogsCache.unshift({
+      timestamp: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+      jobCardNumber: `GSHEET-LINK-CLEARED`,
+      beneficiaryName: `Permanent Google Sheet Link Removed`,
+      updatedBy: "System Config"
+    });
+
+    res.json({
+      status: "success",
+      message: "গুগল শীট লিঙ্ক স্থায়ী মেমরি থেকে সফলভাবে মুছে ফেলা হয়েছে (Saved Google Sheet link cleared)."
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      status: "error",
+      message: err.message || "Failed to clear saved Google Sheet link"
+    });
+  }
 });
 
 app.get("/api/sync-google-sheet", (req: Request, res: Response) => {
@@ -300,146 +647,38 @@ app.post("/api/sync-google-sheet", async (req: Request, res: Response) => {
     }
 
     const trimmedUrl = sheetUrl.trim();
+    const syncResult = await fetchAndParseGoogleSheet(trimmedUrl);
 
-    // Check if user accidentally pasted Google Apps Script link here
-    if (trimmedUrl.includes("script.google.com")) {
-      return res.status(400).json({
-        status: "error",
-        message: "You pasted a Google Apps Script link here. This field is for your Google Spreadsheet link (https://docs.google.com/spreadsheets/d/.../edit). For Apps Script, please use the '2-Way Live Auto-Sync' tab."
-      });
-    }
-
-    // 1. Extract GID (Sheet tab)
-    let gid = "0";
-    const gidMatch = trimmedUrl.match(/[#&?]gid=([0-9]+)/);
-    if (gidMatch) {
-      gid = gidMatch[1];
-    }
-
-    // 2. Extract Document ID or Web Publish ID
-    let sheetId = "";
-    const pubMatch = trimmedUrl.match(/\/spreadsheets\/d\/e\/([a-zA-Z0-9-_]+)/);
-    const docMatch = trimmedUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-
-    if (pubMatch) {
-      sheetId = pubMatch[1];
-    } else if (docMatch) {
-      sheetId = docMatch[1];
-    } else {
-      sheetId = trimmedUrl;
-    }
-
-    if (!sheetId || sheetId.length < 8) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid Google Sheet link. Please copy the full link from your browser address bar (e.g. https://docs.google.com/spreadsheets/d/.../edit)."
-      });
-    }
-
-    // URLs to try in priority order
-    const candidateUrls = pubMatch 
-      ? [
-          `https://docs.google.com/spreadsheets/d/e/${sheetId}/pub?output=csv&gid=${gid}`,
-          `https://docs.google.com/spreadsheets/d/e/${sheetId}/pub?output=csv`
-        ]
-      : [
-          `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
-          `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`,
-          `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`,
-          `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`
-        ];
-
-    let csvContent = "";
-    let isHtmlAuthPage = false;
-    let lastError = "";
-
-    for (const url of candidateUrls) {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 12000);
-
-        const response = await fetch(url, {
-          signal: controller.signal,
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/csv,text/plain,*/*"
-          },
-          redirect: "follow"
-        });
-        clearTimeout(timer);
-
-        if (response.ok) {
-          const bodyText = await response.text();
-          // Check if Google returned an HTML login or access denied page
-          if (bodyText.includes("<html") || bodyText.includes("<!DOCTYPE") || bodyText.includes("accounts.google.com")) {
-            isHtmlAuthPage = true;
-            lastError = 'Could not access Google Sheet. Please check "Share" > "Anyone with the link can view".';
-            continue;
-          }
-
-          if (bodyText.trim().length > 20) {
-            csvContent = bodyText;
-            break;
-          }
-        } else {
-          lastError = `HTTP ${response.status}: ${response.statusText}`;
-        }
-      } catch (fetchErr: any) {
-        lastError = fetchErr.message;
-      }
-    }
-
-    if (!csvContent) {
-      return res.status(403).json({
-        status: "error",
-        message: isHtmlAuthPage 
-          ? 'Could not access Google Sheet. Please check "Share" > "Anyone with the link can view".'
-          : (lastError || 'Could not connect to Google Sheet. Check your URL and internet connectivity.')
-      });
-    }
-
-    // Parse the fetched CSV data
-    const workbook = XLSX.read(csvContent, { type: "string" });
-    const sheetName = workbook.SheetNames[0];
-    const sheetData: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
-
-    const beneficiaries = parseAndMapSheetRows(sheetData);
-
-    if (beneficiaries.length === 0) {
-      return res.status(400).json({
-        status: "error",
-        message: "Google Sheet was reached, but no Job Card data rows were found. Please verify column headers."
-      });
-    }
-
-    // Set Cache with real Google Sheet data
-    beneficiariesCache = beneficiaries;
+    beneficiariesCache = syncResult.beneficiaries;
     activeSyncedSheetUrl = trimmedUrl;
     lastSyncTimestamp = new Date().toISOString();
 
-    const uniqueVillages = Array.from(new Set(beneficiaries.map(b => b.colV))).filter(Boolean);
-    const uniqueSansads = sortSansads(
-      Array.from(new Set(beneficiaries.map(b => b.colB)))
-        .filter(s => s && !isHeaderOrJunkSansad(s))
-    );
+    // Persist to disk
+    saveBeneficiariesToDisk(beneficiariesCache);
+    saveSheetConfig({
+      sheetUrl: trimmedUrl,
+      lastSyncTimestamp,
+      totalRecords: beneficiariesCache.length,
+      villagesCount: syncResult.uniqueVillages.length,
+      sansadsCount: syncResult.uniqueSansads.length
+    });
 
-    // Audit log
     auditLogsCache.unshift({
       timestamp: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
-      jobCardNumber: `GSHEET-SYNC-${beneficiaries.length}`,
-      beneficiaryName: `${beneficiaries.length} Records (${uniqueVillages.length} Villages, ${uniqueSansads.length} Sansads)`,
+      jobCardNumber: `GSHEET-SYNC-${beneficiariesCache.length}`,
+      beneficiaryName: `${beneficiariesCache.length} Records (${syncResult.uniqueVillages.length} Villages, ${syncResult.uniqueSansads.length} Sansads)`,
       updatedBy: "Google Sheet Live Sync"
     });
 
     res.json({
       status: "success",
-      message: `Google Sheet Successfully Synced! Loaded ${beneficiaries.length} verified citizen records across ${uniqueVillages.length} villages and ${uniqueSansads.length} Sansads.`,
-      total: beneficiaries.length,
-      villagesCount: uniqueVillages.length,
-      sansadsCount: uniqueSansads.length,
+      message: `Google Sheet Successfully Synced! Loaded ${beneficiariesCache.length} verified citizen records across ${syncResult.uniqueVillages.length} villages and ${syncResult.uniqueSansads.length} Sansads.`,
+      total: beneficiariesCache.length,
+      villagesCount: syncResult.uniqueVillages.length,
+      sansadsCount: syncResult.uniqueSansads.length,
       sheetUrl: activeSyncedSheetUrl,
       lastSync: lastSyncTimestamp,
-      beneficiaries
+      beneficiaries: beneficiariesCache
     });
   } catch (err: any) {
     res.status(500).json({
@@ -451,160 +690,16 @@ app.post("/api/sync-google-sheet", async (req: Request, res: Response) => {
 
 // Auto-Link and Active Google Sheet configuration
 app.get("/api/google-sheet/active-link", (req: Request, res: Response) => {
+  const cfg = loadSavedSheetConfig();
   res.json({
     status: "success",
-    activeUrl: activeSyncedSheetUrl,
-    lastSync: lastSyncTimestamp,
+    activeUrl: activeSyncedSheetUrl || cfg.sheetUrl || "",
+    isSaved: !!(cfg.sheetUrl && cfg.sheetUrl.trim().length > 0),
+    lastSync: lastSyncTimestamp || cfg.lastSyncTimestamp || "",
     totalRecords: beneficiariesCache.length
   });
 });
 
-// Google Apps Script Live Auto-Sync Configuration & Status
-app.get("/api/google-sheet/script-url", (req: Request, res: Response) => {
-  res.json({
-    status: "success",
-    scriptUrl: activeAppsScriptUrl,
-    isConnected: Boolean(activeAppsScriptUrl && activeAppsScriptUrl.includes("script.google.com"))
-  });
-});
-
-app.post("/api/google-sheet/script-url", (req: Request, res: Response) => {
-  const { scriptUrl } = req.body;
-  activeAppsScriptUrl = (scriptUrl || "").trim();
-  res.json({
-    status: "success",
-    message: "Google Apps Script Live Web App URL saved successfully!",
-    scriptUrl: activeAppsScriptUrl,
-    isConnected: Boolean(activeAppsScriptUrl && activeAppsScriptUrl.includes("script.google.com"))
-  });
-});
-
-app.get("/api/google-sheet/test-script", (req: Request, res: Response) => {
-  res.json({
-    status: "ok",
-    message: "Google Apps Script connection test API is active. Send a POST request with { scriptUrl }.",
-    currentUrl: activeAppsScriptUrl,
-    isConnected: Boolean(activeAppsScriptUrl && activeAppsScriptUrl.includes("script.google.com"))
-  });
-});
-
-app.post("/api/google-sheet/test-script", async (req: Request, res: Response) => {
-  let targetUrl = (req.body.scriptUrl || activeAppsScriptUrl || "").trim();
-  
-  if (!targetUrl) {
-    return res.status(400).json({
-      status: "error",
-      message: "Please enter your Google Apps Script Web App URL."
-    });
-  }
-
-  // Auto-expand if user pasted raw Deployment ID (e.g. AKfycb...)
-  if (!targetUrl.startsWith("http") && targetUrl.startsWith("AKfycb")) {
-    targetUrl = `https://script.google.com/macros/s/${targetUrl}/exec`;
-  }
-
-  // Auto-normalize if user missed /exec or has trailing slash
-  if (targetUrl.includes("script.google.com/macros/s/")) {
-    targetUrl = targetUrl.replace(/\/+$/, "");
-    if (!targetUrl.endsWith("/exec")) {
-      targetUrl = targetUrl + "/exec";
-    }
-  }
-
-  // 1. Check if user pasted a Google Spreadsheet link by mistake
-  if (targetUrl.includes("docs.google.com/spreadsheets")) {
-    return res.status(400).json({
-      status: "error",
-      message: "You pasted a Google Spreadsheet link instead of an Apps Script Web App URL. Please deploy your Google Apps Script and enter the Web App URL (starts with https://script.google.com/... and ends with /exec)."
-    });
-  }
-
-  // 2. Check if user pasted the script editor link (/edit or /projects/)
-  if (targetUrl.includes("/edit") || targetUrl.includes("/home/projects/") || targetUrl.includes("/projects/")) {
-    return res.status(400).json({
-      status: "error",
-      message: "This is the script editor link, not the deployed Web App URL. Please click 'Deploy' > 'New deployment' (or Manage deployments) > Select type: 'Web app' > ensure 'Who has access: Anyone' > Deploy, and copy the Web App URL ending with /exec."
-    });
-  }
-
-  // 3. Ensure valid script domain
-  if (!targetUrl.includes("script.google.com")) {
-    return res.status(400).json({
-      status: "error",
-      message: "Invalid Web App URL. It must start with 'https://script.google.com/macros/s/...' and end with '/exec'."
-    });
-  }
-
-  // If forceSave is requested, save directly
-  if (req.body.forceSave === true) {
-    activeAppsScriptUrl = targetUrl;
-    return res.json({
-      status: "success",
-      message: "Google Apps Script Web App URL saved and activated successfully!",
-      scriptUrl: activeAppsScriptUrl,
-      isConnected: true
-    });
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-    const pingResp = await fetch(targetUrl, {
-      method: "GET",
-      headers: { 
-        "Accept": "application/json, text/plain, */*",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      },
-      signal: controller.signal,
-      redirect: "follow"
-    });
-    clearTimeout(timeoutId);
-
-    const text = await pingResp.text();
-
-    // Specific Google Access Error Detection:
-    const isLoginHtml = text.includes("accounts.google.com") || text.includes("ServiceLogin");
-    const isFileNotFound = text.includes("找不到網頁") || text.includes("檔案不存在") || text.includes("Requested file does not exist") || text.includes("Page not found");
-
-    if (isLoginHtml) {
-      return res.status(403).json({
-        status: "error",
-        message: "Google returned a login page. In Google Apps Script 'Manage deployments', please ensure you clicked the blue 'Deploy' button at the bottom-right after setting 'Who has access: Anyone'."
-      });
-    }
-
-    if (isFileNotFound) {
-      return res.status(404).json({
-        status: "error",
-        message: "Google says 'File does not exist'. Please verify that the blue 'Deploy' button was clicked in Manage deployments, and click the 'Copy' button directly under 'Web app URL' (make sure not to copy the Deployment ID by mistake, and that it ends with /exec)."
-      });
-    }
-
-    let parsed: any = null;
-    try { parsed = JSON.parse(text); } catch (e) {}
-
-    // If HTTP status is 200, the Web App is publicly reachable!
-    if (pingResp.ok) {
-      activeAppsScriptUrl = targetUrl;
-      return res.json({
-        status: "success",
-        message: "Connection verified! Your Google Apps Script is active and linked for Live Two-Way Auto-Sync.",
-        scriptUrl: activeAppsScriptUrl,
-        response: parsed || { status: "success" }
-      });
-    } else {
-      return res.status(pingResp.status).json({
-        status: "error",
-        message: `Google Apps Script returned HTTP ${pingResp.status}. Please make sure 'Who has access' is set to 'Anyone' in Web App deployment.`
-      });
-    }
-  } catch (err: any) {
-    return res.status(500).json({
-      status: "error",
-      message: `Failed to connect: ${err.name === 'AbortError' ? 'Connection timed out after 12 seconds' : err.message}. Verify that the Web App is deployed with access set to Anyone.`
-    });
-  }
-});
 
 // Beneficiaries List
 app.get("/api/beneficiaries", (req: Request, res: Response) => {
@@ -683,69 +778,24 @@ app.post("/api/beneficiaries/update", async (req: Request, res: Response) => {
       auditLogsCache.unshift(auditLog);
       if (auditLogsCache.length > 200) auditLogsCache.pop();
 
-      // Real-Time 2-Way Sync to Google Sheet via Google Apps Script Web App
-      let googleSheetSynced = false;
-      let googleSheetMessage = "";
-
-      if (activeAppsScriptUrl && activeAppsScriptUrl.includes("script.google.com")) {
-        try {
-          const syncPayload = {
-            action: "updateBeneficiary",
-            rowIndex,
-            colH: beneficiariesCache[idx].colH,
-            colI: beneficiariesCache[idx].colI,
-            colJ: beneficiariesCache[idx].colJ,
-            colK: beneficiariesCache[idx].colK,
-            colP: formData.colP || beneficiariesCache[idx].colP,
-            colQ: formData.colQ || beneficiariesCache[idx].colQ,
-            colR: formData.colR || beneficiariesCache[idx].colR,
-            colS: formData.colS || beneficiariesCache[idx].colS,
-            colT: formData.colT ?? beneficiariesCache[idx].colT,
-            colU: formData.colU || beneficiariesCache[idx].colU,
-            colV: formData.colV || beneficiariesCache[idx].colV,
-            colW: formData.colW || beneficiariesCache[idx].colW,
-            colX: formData.colX ?? beneficiariesCache[idx].colX,
-            colAO: formData.colAO || beneficiariesCache[idx].colAO,
-            colAP: formData.colAP || beneficiariesCache[idx].colAP,
-            colAQ: formData.colAQ || beneficiariesCache[idx].colAQ,
-            colAR: formData.colAR || beneficiariesCache[idx].colAR,
-            updatedBy: formData.updatedBy || "Portal Officer"
-          };
-
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-          const scriptRes = await fetch(activeAppsScriptUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(syncPayload),
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-
-          const scriptText = await scriptRes.text();
-          let parsed: any = null;
-          try { parsed = JSON.parse(scriptText); } catch (e) {}
-
-          if (scriptRes.ok && (!parsed || parsed.status !== "error")) {
-            googleSheetSynced = true;
-            googleSheetMessage = parsed?.message || "Synced to Google Sheet!";
-          } else {
-            googleSheetMessage = parsed?.message || "Google Apps Script returned non-ok status";
-          }
-        } catch (err: any) {
-          console.warn("Live Google Sheet sync notice:", err?.message || err);
-          googleSheetMessage = err?.name === 'AbortError' ? 'Sync queued in background' : err?.message;
+      // Direct Google Sheet Row Link Generator
+      let googleSheetRowUrl = "";
+      if (activeSyncedSheetUrl) {
+        const docMatch = activeSyncedSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        const gidMatch = activeSyncedSheetUrl.match(/[#&?]gid=([0-9]+)/);
+        const sheetId = docMatch ? docMatch[1] : "";
+        const gid = gidMatch ? gidMatch[1] : "0";
+        if (sheetId) {
+          googleSheetRowUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/edit#gid=${gid}&range=A${rowIndex}:AR${rowIndex}`;
         }
       }
 
+      saveBeneficiariesToDisk(beneficiariesCache);
+
       return res.json({
         status: "success",
-        message: googleSheetSynced 
-          ? "Data saved, verified & automatically updated in your Google Sheet!" 
-          : "Data saved and verified successfully in portal!",
-        googleSheetSynced,
-        googleSheetMessage,
+        message: "Data saved and verified successfully in database!",
+        googleSheetRowUrl,
         record: beneficiariesCache[idx]
       });
     } else {
@@ -893,10 +943,18 @@ app.post("/api/beneficiaries/import", (req: Request, res: Response) => {
 
   beneficiariesCache = normalizedRecords;
   lastSyncTimestamp = new Date().toISOString();
+  saveBeneficiariesToDisk(beneficiariesCache);
 
   const villages = Array.from(new Set(normalizedRecords.map((b: BeneficiaryRow) => b.colV).filter(Boolean)));
   const sansads = Array.from(new Set(normalizedRecords.map((b: BeneficiaryRow) => b.colB).filter(Boolean)))
     .filter(s => (CANONICAL_16_SANSADS as readonly string[]).includes(s));
+
+  saveSheetConfig({
+    totalRecords: normalizedRecords.length,
+    villagesCount: villages.length,
+    sansadsCount: sansads.length,
+    lastSyncTimestamp
+  });
 
   // Add audit record
   auditLogsCache.unshift({

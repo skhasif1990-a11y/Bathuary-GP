@@ -325,6 +325,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
               className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl px-3 py-2 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
             >
               <option value="">-- ALL 29 VILLAGES --</option>
+              <option value="No Village Name">⚠️ No Village Name (Unassigned)</option>
               {VILLAGES_LIST.map(v => (
                 <option key={v} value={v}>{v}</option>
               ))}

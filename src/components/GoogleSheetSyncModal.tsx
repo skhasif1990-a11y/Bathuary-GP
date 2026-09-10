@@ -24,6 +24,7 @@ import * as XLSX from 'xlsx';
 import { BeneficiaryRow, GoogleSheetConfig } from '../types';
 import { normalizeVillageName, CANONICAL_29_VILLAGES } from '../utils/villageNormalizer';
 import { normalizeSansadName, CANONICAL_16_SANSADS, isHeaderOrJunkSansad } from '../utils/sansadNormalizer';
+import { formatKycDate } from '../utils/dateFormatter';
 import { safeStorage } from '../utils/safeStorage';
 
 interface GoogleSheetSyncModalProps {
@@ -266,6 +267,7 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
           else if (val.includes('account') || val.includes('a/c') || val.includes('ac no') || val.includes('acc no')) colMap['colAR'] = colIdx;
           else if (val.includes('remark') || val.includes('error') || val.includes('reason')) colMap['colT'] = colIdx;
           else if (val.includes('vle') || val.includes('officer') || val.includes('grs')) colMap['colU'] = colIdx;
+          else if (val.includes('delivered') || (val.includes('book') && val.includes('deliver')) || val.includes('job card book')) colMap['colY'] = colIdx;
         });
         break;
       }
@@ -311,7 +313,7 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
         }
       }
 
-      const rawVillage = get('colV', 21) || get('colV', 20) || 'BATHUARY';
+      const rawVillage = get('colV', 21);
       const normalizedVillage = normalizeVillageName(rawVillage, rawSansad);
       const normalizedSansad = normalizeSansadName(rawSansad, normalizedVillage) || 'BATHUARY 1';
 
@@ -344,12 +346,13 @@ export const GoogleSheetSyncModal: React.FC<GoogleSheetSyncModalProps> = ({
         colP: aadhaarClean,
         colQ: mobileClean,
         colR: isKycDone ? 'Yes' : 'No',
-        colS: get('colS', 18) || (isKycDone ? new Date().toLocaleDateString('en-GB') : ''),
+        colS: get('colS', 18) ? formatKycDate(get('colS', 18)) : '',
         colT: get('colT', 19) || '',
         colU: get('colU', 20) || 'MANIK DAS, GRS',
         colV: normalizedVillage,
         colW: get('colW', 22) || 'Yes',
         colX: get('colX', 23) || '',
+        colY: get('colY', 24) || '',
         colAF: get('colAF', 31) || '',
         colAG: get('colAG', 32) || name,
         colAO: get('colAO', 40) || 'BANK OF INDIA',

@@ -186,6 +186,10 @@ export const CitizenSearchCorner: React.FC<CitizenSearchCornerProps> = ({
                         <span className="font-black text-emerald-700 truncate block">{row.colW || "Yes"}</span>
                       </div>
                       <div>
+                        <span className="text-[10px] font-bold text-slate-400 block">Book Delivered (Col Y):</span>
+                        <span className={`font-black truncate block ${row.colY === 'Yes' ? 'text-emerald-700' : 'text-slate-600'}`}>{row.colY || "—"}</span>
+                      </div>
+                      <div>
                         <span className="text-[10px] font-bold text-slate-400 block">ABPS Status:</span>
                         <span className={`font-black text-[11px] ${row.colO === 'Yes' ? 'text-emerald-700' : 'text-slate-500'}`}>
                           {row.colO === 'Yes' ? "Active (Direct DBT)" : "Pending"}

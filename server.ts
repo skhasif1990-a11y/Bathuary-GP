@@ -159,6 +159,7 @@ function parseAndMapSheetRows(rawData: any[][]): BeneficiaryRow[] {
         else if (val.includes('account') || val.includes('a/c') || val.includes('ac no') || val.includes('acc no')) colMap['colAR'] = colIdx;
         else if (val.includes('remark') || val.includes('error') || val.includes('reason')) colMap['colT'] = colIdx;
         else if (val.includes('vle') || val.includes('officer') || val.includes('grs')) colMap['colU'] = colIdx;
+        else if (val.includes('delivered') || (val.includes('book') && val.includes('deliver')) || val.includes('job card book')) colMap['colY'] = colIdx;
       });
       break;
     }
@@ -209,7 +210,7 @@ function parseAndMapSheetRows(rawData: any[][]): BeneficiaryRow[] {
       }
     }
 
-    const rawVillage = get('colV', 21) || get('colV', 20) || '';
+    const rawVillage = get('colV', 21) || '';
     // Strictly normalize to one of the 29 canonical villages or 'No Village Name'
     const normalizedVillage = normalizeVillageName(rawVillage, rawSansad);
     // Strictly normalize to one of the 16 canonical Sansads of Bathuary GP (BATHUARY 1 to BATHUARY 16)
@@ -754,24 +755,36 @@ app.post("/api/beneficiaries/update", async (req: Request, res: Response) => {
 
     const idx = rowIndex - 2;
     if (idx >= 0 && idx < beneficiariesCache.length) {
-      // Surgical atomic update of the targeted row ONLY - no other row or unedited cell is affected
-      beneficiariesCache[idx] = {
-        ...beneficiariesCache[idx],
-        colP: formData.colP !== undefined ? formData.colP : beneficiariesCache[idx].colP,
-        colQ: formData.colQ !== undefined ? formData.colQ : beneficiariesCache[idx].colQ,
-        colR: formData.colR !== undefined ? formData.colR : beneficiariesCache[idx].colR,
-        colS: formData.colS !== undefined ? formData.colS : beneficiariesCache[idx].colS,
-        colT: formData.colT !== undefined ? formData.colT : beneficiariesCache[idx].colT,
-        colU: formData.colU !== undefined ? formData.colU : beneficiariesCache[idx].colU,
-        colV: formData.colV !== undefined ? formData.colV : beneficiariesCache[idx].colV,
-        colW: formData.colW !== undefined ? formData.colW : beneficiariesCache[idx].colW,
-        colX: formData.colX !== undefined ? formData.colX : beneficiariesCache[idx].colX,
-        colY: formData.colY !== undefined ? formData.colY : (beneficiariesCache[idx].colY || ''),
-        colAO: formData.colAO !== undefined ? formData.colAO : beneficiariesCache[idx].colAO,
-        colAP: formData.colAP !== undefined ? formData.colAP : beneficiariesCache[idx].colAP,
-        colAQ: formData.colAQ !== undefined ? formData.colAQ : beneficiariesCache[idx].colAQ,
-        colAR: formData.colAR !== undefined ? formData.colAR : beneficiariesCache[idx].colAR
-      };
+      const changedFields: string[] = Array.isArray(formData.changedFields) ? formData.changedFields : [];
+      const fieldUpdates: Record<string, any> = formData.fieldUpdates || {};
+
+      // If changedFields is provided, ONLY update the fields that were actually edited
+      if (changedFields.length > 0) {
+        for (const field of changedFields) {
+          if (formData[field] !== undefined) {
+            (beneficiariesCache[idx] as any)[field] = formData[field];
+          }
+        }
+      } else {
+        // Surgical update of provided fields
+        beneficiariesCache[idx] = {
+          ...beneficiariesCache[idx],
+          colP: formData.colP !== undefined ? formData.colP : beneficiariesCache[idx].colP,
+          colQ: formData.colQ !== undefined ? formData.colQ : beneficiariesCache[idx].colQ,
+          colR: formData.colR !== undefined ? formData.colR : beneficiariesCache[idx].colR,
+          colS: formData.colS !== undefined ? formData.colS : beneficiariesCache[idx].colS,
+          colT: formData.colT !== undefined ? formData.colT : beneficiariesCache[idx].colT,
+          colU: formData.colU !== undefined ? formData.colU : beneficiariesCache[idx].colU,
+          colV: formData.colV !== undefined ? formData.colV : beneficiariesCache[idx].colV,
+          colW: formData.colW !== undefined ? formData.colW : beneficiariesCache[idx].colW,
+          colX: formData.colX !== undefined ? formData.colX : beneficiariesCache[idx].colX,
+          colY: formData.colY !== undefined ? formData.colY : (beneficiariesCache[idx].colY || ''),
+          colAO: formData.colAO !== undefined ? formData.colAO : beneficiariesCache[idx].colAO,
+          colAP: formData.colAP !== undefined ? formData.colAP : beneficiariesCache[idx].colAP,
+          colAQ: formData.colAQ !== undefined ? formData.colAQ : beneficiariesCache[idx].colAQ,
+          colAR: formData.colAR !== undefined ? formData.colAR : beneficiariesCache[idx].colAR
+        };
+      }
 
       // Add to audit trail
       const auditLog: AuditLog = {
@@ -798,6 +811,7 @@ app.post("/api/beneficiaries/update", async (req: Request, res: Response) => {
       saveBeneficiariesToDisk(beneficiariesCache);
 
       // Attempt live surgical push to Google Sheet if Google Apps Script Webhook is active
+      // CRITICAL: Strictly sends ONLY the modified/edited fields to Google Sheet!
       let googleSheetSynced = false;
       let googleSheetMessage = "";
       const cfg = loadSavedSheetConfig();
@@ -807,35 +821,34 @@ app.post("/api/beneficiaries/update", async (req: Request, res: Response) => {
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 6000);
+
+          const fieldsToSync = changedFields.length > 0 ? changedFields : Object.keys(fieldUpdates);
+          const gasPayload: Record<string, any> = {
+            action: "updateRow",
+            rowIndex,
+            colH: beneficiariesCache[idx].colH,
+            colJ: beneficiariesCache[idx].colJ,
+            changedFields: fieldsToSync,
+            updates: {}
+          };
+
+          // ONLY populate the specific edited fields in the payload
+          for (const f of fieldsToSync) {
+            const val = (beneficiariesCache[idx] as any)[f];
+            gasPayload.updates[f] = val;
+            gasPayload[f] = val;
+          }
+
           const gasRes = await fetch(scriptUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "updateRow",
-              rowIndex,
-              colH: beneficiariesCache[idx].colH,
-              colJ: beneficiariesCache[idx].colJ,
-              colP: beneficiariesCache[idx].colP,
-              colQ: beneficiariesCache[idx].colQ,
-              colR: beneficiariesCache[idx].colR,
-              colS: beneficiariesCache[idx].colS,
-              colT: beneficiariesCache[idx].colT,
-              colU: beneficiariesCache[idx].colU,
-              colV: beneficiariesCache[idx].colV,
-              colW: beneficiariesCache[idx].colW,
-              colX: beneficiariesCache[idx].colX,
-              colY: beneficiariesCache[idx].colY,
-              colAO: beneficiariesCache[idx].colAO,
-              colAP: beneficiariesCache[idx].colAP,
-              colAQ: beneficiariesCache[idx].colAQ,
-              colAR: beneficiariesCache[idx].colAR
-            }),
+            body: JSON.stringify(gasPayload),
             signal: controller.signal
           });
           clearTimeout(timer);
           if (gasRes.ok) {
             googleSheetSynced = true;
-            googleSheetMessage = `Row ${rowIndex} updated in Google Sheet`;
+            googleSheetMessage = `Row ${rowIndex} updated in Google Sheet (${fieldsToSync.join(', ') || 'Partial update'})`;
           }
         } catch (gasErr: any) {
           googleSheetMessage = gasErr.message;
@@ -951,7 +964,12 @@ app.get("/api/dashboard-stats", (req: Request, res: Response) => {
     }
   });
 
-  const villageStats = CANONICAL_29_VILLAGES.map(vName => villageStatsMap[vName] || {
+  const allVillageKeys = [...CANONICAL_29_VILLAGES];
+  if (villageStatsMap['No Village Name'] && villageStatsMap['No Village Name'].total > 0) {
+    allVillageKeys.push('No Village Name');
+  }
+
+  const villageStats = allVillageKeys.map(vName => villageStatsMap[vName] || {
     village: vName,
     sansad: "",
     total: 0,

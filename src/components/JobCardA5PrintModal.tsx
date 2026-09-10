@@ -201,8 +201,8 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
                 </span>
               </div>
 
-              {/* Row 4: Job Card Submitted */}
-              <div className="flex items-center gap-2 col-span-2">
+              {/* Row 4: Job Card Submitted & Book Delivered */}
+              <div className="flex items-center gap-2">
                 <span className="font-bold text-slate-600 whitespace-nowrap min-w-[110px]">
                   JOB CARD SUBMITTED:
                 </span>
@@ -223,6 +223,32 @@ export const JobCardA5PrintModal: React.FC<JobCardA5PrintModalProps> = ({
                         <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                       )}
                       <span className="whitespace-nowrap">{val || 'Yes'}</span>
+                    </span>
+                  );
+                })()}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-600 whitespace-nowrap min-w-[110px]">
+                  BOOK DELIVERED:
+                </span>
+                {(() => {
+                  const val = (row.colY || '').trim();
+                  const isYes = val.toLowerCase() === 'yes' || val === 'হ্যাঁ';
+                  return (
+                    <span
+                      className={`inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded border w-fit shrink-0 ${
+                        isYes
+                          ? 'text-emerald-800 bg-emerald-50 border-emerald-300'
+                          : 'text-slate-600 bg-slate-50 border-slate-300'
+                      }`}
+                    >
+                      {isYes ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block shrink-0" />
+                      )}
+                      <span className="whitespace-nowrap">{val || '—'}</span>
                     </span>
                   );
                 })()}

@@ -84,6 +84,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
     colV: '', // Village
     colW: '', // Submitted to office
     colX: '', // Remarks
+    colY: '', // Job Card Book Delivered (Yes/No)
     colAO: '', // Bank Name
     colAP: '', // IFSC
     colAQ: '', // Branch
@@ -95,6 +96,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
   const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [mergerNotice, setMergerNotice] = useState<string>('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<Array<{ key: string; label: string; value: string }>>([]);
 
   // Filtered Job Cards & Applicants
   const uniqueJobCards = Array.from(new Set(beneficiaries.map(b => b.colH).filter(Boolean))).sort();
@@ -286,12 +288,13 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           colP: match.colP || '',
           colQ: match.colQ || '',
           colR: match.colR || '',
-          colS: formattedKyc || (match.colR === 'Yes' || match.colR === 'Y' ? new Date().toLocaleDateString('en-GB') : ''),
+          colS: formattedKyc || '',
           colT: match.colT || '',
           colU: match.colU || (currentUser ? `${currentUser.name}, ${currentUser.role}` : ''),
           colV: match.colV || '',
           colW: match.colW || '',
           colX: match.colX || '',
+          colY: match.colY || '',
           colAO: resolvedBank,
           colAP: resolvedIfsc,
           colAQ: resolvedBranch,
@@ -520,6 +523,34 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
       return;
     }
 
+    // Calculate which fields have actually been modified compared to activeRow
+    const fieldDefinitions: Array<{ key: keyof typeof formData; label: string }> = [
+      { key: 'colP', label: 'Aadhaar / ID Number (Col P)' },
+      { key: 'colQ', label: 'Phone Number (Col Q)' },
+      { key: 'colR', label: 'e-KYC Done (Col R)' },
+      { key: 'colS', label: 'Date of e-KYC Done (Col S)' },
+      { key: 'colT', label: 'Error / Death Remark (Col T)' },
+      { key: 'colU', label: 'e-KYC Processed by (Col U)' },
+      { key: 'colV', label: 'Village Name (Col V)' },
+      { key: 'colW', label: 'Job Card Submitted (Col W)' },
+      { key: 'colX', label: 'Remarks (Col X)' },
+      { key: 'colY', label: 'Job Card Book Delivered (Col Y)' },
+      { key: 'colAO', label: 'Bank Name (Col AO)' },
+      { key: 'colAP', label: 'IFSC Code (Col AP)' },
+      { key: 'colAQ', label: 'Branch Name (Col AQ)' },
+      { key: 'colAR', label: 'Account Number (Col AR)' }
+    ];
+
+    const detectedChanges: Array<{ key: string; label: string; value: string }> = [];
+    fieldDefinitions.forEach(({ key, label }) => {
+      const currentVal = (formData[key] || '').toString().trim();
+      const originalVal = ((activeRow as any)[key] || '').toString().trim();
+      if (currentVal !== originalVal) {
+        detectedChanges.push({ key, label, value: currentVal });
+      }
+    });
+
+    setPendingChanges(detectedChanges);
     setShowConfirmModal(true);
   };
 
@@ -527,11 +558,19 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
     setShowConfirmModal(false);
     if (!activeRow) return;
 
+    const changedKeys = pendingChanges.map(c => c.key);
+    const fieldUpdates: Record<string, any> = {};
+    changedKeys.forEach(k => {
+      fieldUpdates[k] = (formData as any)[k];
+    });
+
     setIsSaving(true);
     const saveRes = await onSaveRecord({
       rowIndex: activeRow.rowIndex,
-      ...formData
-    });
+      ...formData,
+      changedFields: changedKeys,
+      fieldUpdates
+    } as any);
     setIsSaving(false);
 
     const isSuccess = typeof saveRes === 'boolean' ? saveRes : saveRes?.success;
@@ -961,12 +1000,12 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
             </div>
           </div>
 
-          {/* Section 2: Editable e-KYC Data (Col P - Col X) */}
+          {/* Section 2: Editable e-KYC Data (Col P - Col Y) */}
           <div className="rounded-3xl bg-gradient-to-br from-white to-emerald-50/20 border-2 border-emerald-200 p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4 border-b border-emerald-100 pb-3">
               <span className="w-3 h-3 rounded-full bg-emerald-600 ring-4 ring-emerald-100" />
               <h4 className="text-sm sm:text-base font-black text-slate-900">
-                Data Entry & e-KYC Verification (Col P - Col X)
+                Data Entry & e-KYC Verification (Col P - Col Y)
               </h4>
             </div>
 
@@ -1100,6 +1139,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                   className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer"
                 >
                   <option value="">-- Select Village --</option>
+                  <option value="No Village Name">No Village Name (Unassigned)</option>
                   {VILLAGES_LIST.map(v => (
                     <option key={v} value={v}>{v}</option>
                   ))}
@@ -1134,6 +1174,22 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                   onChange={(e) => setFormData({ ...formData, colX: e.target.value })}
                   className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all"
                 />
+              </div>
+
+              {/* Col Y: Job Card Book Delivered (Yes/No) */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 mb-1 block">
+                  Job Card Book Delivered? (Yes/No) (Col Y):
+                </label>
+                <select
+                  value={formData.colY}
+                  onChange={(e) => setFormData({ ...formData, colY: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3.5 py-2.5 border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 focus:outline-none transition-all cursor-pointer"
+                >
+                  <option value="">-- Select --</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
               </div>
             </div>
           </div>
@@ -1359,6 +1415,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                     colV: activeRow.colV || '',
                     colW: activeRow.colW || '',
                     colX: activeRow.colX || '',
+                    colY: activeRow.colY || '',
                     colAO: activeRow.colAO || '',
                     colAP: activeRow.colAP || '',
                     colAQ: activeRow.colAQ || '',
@@ -1400,9 +1457,33 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
               Confirm Save?
             </h4>
             <p className="text-xs text-slate-600 mt-2">
-              Are you sure you want to update this beneficiary record in Bathuary GP database?
+              Only the modified fields below will be updated in the Google Sheet:
             </p>
-            <div className="flex gap-3 mt-6">
+
+            {pendingChanges.length > 0 ? (
+              <div className="my-3 p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-left max-h-48 overflow-y-auto">
+                <div className="text-[11px] font-black text-emerald-900 mb-1.5 flex items-center justify-between">
+                  <span>Modified Fields to Sync:</span>
+                  <span className="bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full text-[10px]">
+                    {pendingChanges.length} field{pendingChanges.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {pendingChanges.map(c => (
+                    <div key={c.key} className="text-[11px] flex items-center justify-between gap-2 text-slate-700 border-b border-emerald-100/60 pb-1">
+                      <span className="font-semibold text-slate-900 truncate">{c.label}:</span>
+                      <span className="font-mono text-emerald-800 font-bold shrink-0">{c.value || '<Empty>'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="my-3 p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 font-medium">
+                No fields were changed.
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-4">
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}

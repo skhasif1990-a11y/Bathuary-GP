@@ -432,13 +432,16 @@ export const DashboardAnalytics: React.FC<DashboardProps> = ({
             </div>
 
             <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300 shadow-2xs">
-              {filteredVillages.length} of 29 Villages
+              {filteredVillages.some(v => v.village === 'No Village Name') 
+                ? `${filteredVillages.filter(v => v.village !== 'No Village Name').length} Villages + Unassigned`
+                : `${filteredVillages.length} of 29 Villages`}
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[550px] overflow-y-auto pr-1">
           {filteredVillages.map(vs => {
+            const isNoVillage = vs.village === 'No Village Name';
             const vDonePct = vs.total ? Math.round((vs.done / vs.total) * 100) : 0;
             const isHigh = vDonePct >= 75;
             const isMed = vDonePct >= 40 && vDonePct < 75;
@@ -446,14 +449,37 @@ export const DashboardAnalytics: React.FC<DashboardProps> = ({
             return (
               <div 
                 key={vs.village} 
-                className="p-4 rounded-2xl bg-gradient-to-br from-white via-slate-50 to-emerald-50/20 border-2 border-slate-200 hover:border-emerald-500 hover:shadow-lg transition-all duration-200 relative overflow-hidden group"
+                className={`p-4 rounded-2xl border-2 transition-all duration-200 relative overflow-hidden group ${
+                  isNoVillage 
+                    ? 'bg-amber-50/50 border-amber-300 hover:border-amber-500 hover:shadow-lg' 
+                    : 'bg-gradient-to-br from-white via-slate-50 to-emerald-50/20 border-slate-200 hover:border-emerald-500 hover:shadow-lg'
+                }`}
               >
-                <div className={`h-1.5 w-full absolute top-0 left-0 ${isHigh ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : isMed ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-rose-500 to-red-500'}`} />
+                <div className={`h-1.5 w-full absolute top-0 left-0 ${
+                  isNoVillage 
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500' 
+                    : isHigh 
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500' 
+                      : isMed 
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500' 
+                        : 'bg-gradient-to-r from-rose-500 to-red-500'
+                }`} />
                 <div className="flex items-center justify-between">
-                  <h4 className="font-black text-slate-900 text-xs sm:text-sm truncate max-w-[170px] uppercase group-hover:text-emerald-700 transition-colors">
-                    {vs.village}
-                  </h4>
-                  <span className="text-xs font-black text-slate-800 bg-white px-2.5 py-0.5 rounded-full border border-slate-200 shadow-2xs font-mono">
+                  <div className="truncate max-w-[190px]">
+                    <h4 className={`font-black text-xs sm:text-sm truncate uppercase transition-colors ${
+                      isNoVillage ? 'text-amber-950 group-hover:text-amber-800' : 'text-slate-900 group-hover:text-emerald-700'
+                    }`}>
+                      {isNoVillage ? '⚠️ No Village Name' : vs.village}
+                    </h4>
+                    {isNoVillage && (
+                      <span className="text-[9px] font-bold text-amber-700 block">
+                        Missing in Sheet (Needs Update)
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-xs font-black px-2.5 py-0.5 rounded-full border shadow-2xs font-mono ${
+                    isNoVillage ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-slate-800 border-slate-200'
+                  }`}>
                     {vs.total} Cards
                   </span>
                 </div>

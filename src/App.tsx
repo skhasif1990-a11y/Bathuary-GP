@@ -259,22 +259,35 @@ export default function App() {
     aadhaarSeeded
   };
 
-  // Village stats are strictly bounded to the canonical 29 villages
-  const villageStats: VillageStat[] = CANONICAL_29_VILLAGES.map(
+  // Village stats include canonical 29 villages, plus 'No Village Name' if unassigned applicants exist
+  const allVillageKeys = [...CANONICAL_29_VILLAGES];
+  if (villageStatsMap['No Village Name'] && villageStatsMap['No Village Name'].total > 0) {
+    allVillageKeys.push('No Village Name');
+  }
+
+  const villageStats: VillageStat[] = allVillageKeys.map(
     vName => villageStatsMap[vName] || { village: vName, sansad: '', total: 0, done: 0, pending: 0, death: 0 }
   ).sort((a, b) => b.total - a.total);
 
   // Save Record Handler
-  const handleSaveRecord = async (formData: Partial<BeneficiaryRow>): Promise<{ success: boolean; googleSheetSynced?: boolean; googleSheetMessage?: string }> => {
+  const handleSaveRecord = async (formData: Partial<BeneficiaryRow> & { changedFields?: string[]; fieldUpdates?: Record<string, any> }): Promise<{ success: boolean; googleSheetSynced?: boolean; googleSheetMessage?: string }> => {
     try {
+      const normalizedColV = formData.colV !== undefined
+        ? (formData.colV === 'No Village Name' ? 'No Village Name' : normalizeVillageName(formData.colV || '', formData.colB || ''))
+        : undefined;
+
+      const payload: any = {
+        ...formData,
+        updatedBy: `${currentUser.name} (${currentUser.mobile})`
+      };
+      if (normalizedColV !== undefined) {
+        payload.colV = normalizedColV;
+      }
+
       const res = await fetch('/api/beneficiaries/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          colV: normalizeVillageName(formData.colV || '', formData.colB || ''),
-          updatedBy: `${currentUser.name} (${currentUser.mobile})`
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json().catch(() => ({}));

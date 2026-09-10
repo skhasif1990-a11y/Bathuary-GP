@@ -136,16 +136,16 @@ export function normalizeVillageName(rawVillage?: string, fallbackSansad?: strin
     return VILLAGE_ALIAS_MAP[cleaned];
   }
 
-  // 3. Substring / Fuzzy match with canonical list
+  // 3. Substring / Fuzzy match with canonical list (minimum 4 characters for safe matching)
   for (const canon of CANONICAL_29_VILLAGES) {
     if (cleaned === canon.replace(/\s+/g, '')) {
       return canon;
     }
-    if (cleaned.includes(canon) || canon.includes(cleaned)) {
+    if (cleaned.length >= 4 && (cleaned.includes(canon) || (cleaned.length >= 5 && canon.includes(cleaned)))) {
       return canon;
     }
   }
 
-  // 4. If invalid or officer/text column leak, return 'No Village Name'
+  // 4. If invalid, blank, or unrecognized, return 'No Village Name'
   return 'No Village Name';
 }

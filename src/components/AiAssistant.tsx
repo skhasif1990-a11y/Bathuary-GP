@@ -359,9 +359,9 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
 
     if (lower.includes('kyc') || lower.includes('ই-কেওয়াইসি') || lower.includes('pending') || lower.includes('বাকি') || lower.includes('done')) {
       if (isBengali) {
-        return `বাথুয়ারী গ্রাম পঞ্চায়েতের (এগরা-২ ব্লক, পূর্ব মেদিনীপুর) বর্তমান লাইভ পরিসংখ্যান:\n• মোট উপভোক্তা: ${beneficiaries.length} জন\n• সম্পন্ন ই-কেওয়াইসি (Done): ${doneCount} জন (${pct}%)\n• এখনো বাকি (Pending): ${pendingCount} জন\n• প্রয়াত/নিষ্ক্রিয় চিহ্নিত: ${deadCount} জন\n\nবাকি নাগরিকদের আধার কার্ড ও ব্যাংক পাসবুক নিয়ে গ্রাম পঞ্চায়েত কার্যালয় বা সংসদের ভিএলই (VLE)/জিআরএস (GRS)-এর সাথে যোগাযোগ করার পরামর্শ দেওয়া হচ্ছে।`;
+        return `বাথুয়ারী গ্রাম পঞ্চায়েতের (এগরা-২ ডেভেলপমেন্ট ব্লক, পূর্ব মেদিনীপুর) বর্তমান লাইভ পরিসংখ্যান:\n• মোট উপভোক্তা: ${beneficiaries.length} জন\n• সম্পন্ন ই-কেওয়াইসি (Done): ${doneCount} জন (${pct}%)\n• এখনো বাকি (Pending): ${pendingCount} জন\n• প্রয়াত/নিষ্ক্রিয় চিহ্নিত: ${deadCount} জন\n\nবাকি নাগরিকদের আধার কার্ড ও ব্যাংক পাসবুক নিয়ে গ্রাম পঞ্চায়েত কার্যালয় বা সংসদের ভিএলই (VLE)/জিআরএস (GRS)-এর সাথে যোগাযোগ করার পরামর্শ দেওয়া হচ্ছে।`;
       }
-      return `Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) Live Status:\n• Total Beneficiaries: ${beneficiaries.length}\n• e-KYC Done: ${doneCount} (${pct}%)\n• e-KYC Pending: ${pendingCount}\n• Flagged Deceased: ${deadCount}\n\nPlease advise pending beneficiaries to visit the GP office or their Sansad VLE/GRS with Aadhaar card and Bank passbook.`;
+      return `Bathuary Gram Panchayat (Egra-II Development Block, Purba Medinipur) Live Status:\n• Total Beneficiaries: ${beneficiaries.length}\n• e-KYC Done: ${doneCount} (${pct}%)\n• e-KYC Pending: ${pendingCount}\n• Flagged Deceased: ${deadCount}\n\nPlease advise pending beneficiaries to visit the GP office or their Sansad VLE/GRS with Aadhaar card and Bank passbook.`;
     }
 
     if (lower.includes('abps') || lower.includes('এবিপিএস') || lower.includes('payment') || lower.includes('মজুরি') || lower.includes('wage')) {
@@ -380,22 +380,22 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
 
     if (lower.includes('গ্রাম') || lower.includes('village') || lower.includes('সংসদ') || lower.includes('sansad')) {
       if (isBengali) {
-        return `বাথুয়ারী গ্রাম পঞ্চায়েতে (এগরা-২ ব্লক, পূর্ব মেদিনীপুর) মোট **২৯টি গ্রাম** এবং **১৬টি সংসদ** (BATHUARY 1 থেকে BATHUARY 16) রয়েছে।\n\n২৯টি গ্রামের সম্পূর্ণ তালিকা:\n${canonicalVillages.join(', ')}।\n\n(উল্লেখ্য: বাথুয়ারী গ্রাম পঞ্চায়েত পূর্ব মেদিনীপুর জেলার এগরা মহকুমার অন্তর্গত)।`;
+        return `বাথুয়ারী গ্রাম পঞ্চায়েতে (এগরা-২ ডেভেলপমেন্ট ব্লক, পূর্ব মেদিনীপুর) মোট **২৯টি গ্রাম** এবং **১৬টি সংসদ** (BATHUARY 1 থেকে BATHUARY 16) রয়েছে।\n\n২৯টি গ্রামের সম্পূর্ণ তালিকা:\n${canonicalVillages.join(', ')}।\n\n(উল্লেখ্য: বাথুয়ারী গ্রাম পঞ্চায়েত পূর্ব মেদিনীপুর জেলার এগরা মহকুমার অন্তর্গত)।`;
       }
-      return `Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) comprises **29 Canonical Villages** and **16 Sansads** (BATHUARY 1 to BATHUARY 16).\n\nOfficial 29 Villages:\n${canonicalVillages.join(', ')}.`;
+      return `Bathuary Gram Panchayat (Egra-II Development Block, Purba Medinipur) comprises **29 Canonical Villages** and **16 Sansads** (BATHUARY 1 to BATHUARY 16).\n\nOfficial 29 Villages:\n${canonicalVillages.join(', ')}.`;
     }
 
     if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়') || lower.includes('কোথায়') || lower.includes('where')) {
       if (isBengali) {
-        return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত সরকারি তথ্য:\n• অফিস ঠিকানা: গ্রাম - হাটবাইঞ্চা / বাথুয়ারী, ডাকঘর - বাথুয়ারী, থানা - এগরা, ব্লক - এগরা-২, জেলা - পূর্ব মেদিনীপুর, পিন কোড - ৭২১৪৪৮।\n• ইমেইল: bathuarygp@gmail.com\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা (সরকারি ছুটির দিন ছাড়া)।\n• দায়িত্বপ্রাপ্ত প্রধান আধিকারিকগণ: পঞ্চায়েত প্রধান, সচিব (শ্রী সুপ্রভাত পড়ুয়া), এবং জিআরএস (শ্রী মানিক দাস)।`;
+        return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত সরকারি তথ্য:\n• অফিস ঠিকানা: গ্রাম - হাটবাইঞ্চা / বাথুয়ারী, ডাকঘর - বাথুয়ারী, থানা - এগরা, ব্লক - এগরা-২ ডেভেলপমেন্ট ব্লক, জেলা - পূর্ব মেদিনীপুর, পিন কোড - ৭২১৪৪৮।\n• ইমেইল: bathuarygp@gmail.com\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা (সরকারি ছুটির দিন ছাড়া)।\n• দায়িত্বপ্রাপ্ত প্রধান আধিকারিকগণ: পঞ্চায়েত প্রধান, সচিব (শ্রী সুপ্রভাত পড়ুয়া), এবং জিআরএস (শ্রী মানিক দাস)।`;
       }
-      return `Bathuary Gram Panchayat Office Information:\n• Address: Village - Hatbaincha / Bathuary, P.O. - Bathuary, P.S. - Egra, Block - Egra-II, District - Purba Medinipur, West Bengal - 721448.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan, Secretary (Suprabhat Parua), GRS (Manik Das), VLE (Sk David & Niranjan Pradhan).`;
+      return `Bathuary Gram Panchayat Office Information:\n• Address: Village - Hatbaincha / Bathuary, P.O. - Bathuary, P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721448.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan, Secretary (Suprabhat Parua), GRS (Manik Das), VLE (Sk David & Niranjan Pradhan).`;
     }
 
     if (isBengali) {
-      return `নমস্কার! আমি বাথুয়ারী গ্রাম পঞ্চায়েত (এগরা-২ ব্লক, পূর্ব মেদিনীপুর) ভার্চুয়াল এআই হেল্পডেস্ক অ্যাসিস্ট্যান্ট।\nবর্তমানে পোর্টালে মোট ${beneficiaries.length} জন উপভোক্তার তথ্য সংরক্ষিত রয়েছে (ই-কেওয়াইসি সম্পন্ন: ${doneCount} জন, বাকি: ${pendingCount} জন)।\nআপনি ২৯টি গ্রাম, ১৬টি সংসদ, আধার ও মোবাইল নম্বর আপডেট, ব্যাংক IFSC মার্জার, এবিপিএস (ABPS) বা অফিস সময় সম্পর্কে যেকোনো প্রশ্ন করতে পারেন।`;
+      return `নমস্কার! আমি বাথুয়ারী গ্রাম পঞ্চায়েত (এগরা-২ ডেভেলপমেন্ট ব্লক, পূর্ব মেদিনীপুর) ভার্চুয়াল এআই হেল্পডেস্ক অ্যাসিস্ট্যান্ট।\nবর্তমানে পোর্টালে মোট ${beneficiaries.length} জন উপভোক্তার তথ্য সংরক্ষিত রয়েছে (ই-কেওয়াইসি সম্পন্ন: ${doneCount} জন, বাকি: ${pendingCount} জন)।\nআপনি ২৯টি গ্রাম, ১৬টি সংসদ, আধার ও মোবাইল নম্বর আপডেট, ব্যাংক IFSC মার্জার, এবিপিএস (ABPS) বা অফিস সময় সম্পর্কে যেকোনো প্রশ্ন করতে পারেন।`;
     }
-    return `Hello! I am the Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) Virtual AI Helpdesk Assistant.\nCurrently ${beneficiaries.length} beneficiaries are registered (${doneCount} e-KYC Done, ${pendingCount} Pending).\nYou can ask about the 29 villages, 16 Sansads, Aadhaar & Mobile update, Bank IFSC merger, ABPS activation, or office details.`;
+    return `Hello! I am the Bathuary Gram Panchayat (Egra-II Development Block, Purba Medinipur) Virtual AI Helpdesk Assistant.\nCurrently ${beneficiaries.length} beneficiaries are registered (${doneCount} e-KYC Done, ${pendingCount} Pending).\nYou can ask about the 29 villages, 16 Sansads, Aadhaar & Mobile update, Bank IFSC merger, ABPS activation, or office details.`;
   };
 
   // Send question with live database stats to server Gemini API

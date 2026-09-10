@@ -1,7 +1,7 @@
 import { BankMasterItem } from '../types';
 
 /**
- * Official Bank Master Database for Bathuary Gram Panchayat, Egra-II Block,
+ * Official Bank Master Database for Bathuary Gram Panchayat, Egra-II Development Block,
  * Purba Medinipur, and West Bengal.
  *
  * Grounded in:

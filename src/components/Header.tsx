@@ -129,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-emerald-400 leading-tight mt-0.5">
                   <span>Panchayats & Rural Development</span>
-                  <span className="text-slate-400 hidden sm:inline">• Bathuary Gram Panchayat, Egra-II Block</span>
+                  <span className="text-slate-400 hidden sm:inline">• Bathuary Gram Panchayat, Egra-II Development Block</span>
                 </div>
               </div>
             </div>

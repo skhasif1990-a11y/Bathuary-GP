@@ -45,7 +45,7 @@ export const HomeOverview: React.FC<HomeOverviewProps> = ({
           </div>
           <div className="overflow-hidden whitespace-nowrap text-xs text-slate-200 font-medium flex-1">
             <div className="inline-block animate-pulse">
-              📢 <strong className="text-emerald-300 font-bold">Bathuary Gram Panchayat (Egra-II Block)</strong>: 100% Aadhaar Biometric e-KYC & ABPS validation active across all 29 canonical villages. Permanent Google Sheet sync connected. Instant A4/A5 certificate printing enabled.
+              📢 <strong className="text-emerald-300 font-bold">Bathuary Gram Panchayat (Egra-II Development Block)</strong>: 100% Aadhaar Biometric e-KYC & ABPS validation active across all 29 canonical villages. Permanent Google Sheet sync connected. Instant A4/A5 certificate printing enabled.
             </div>
           </div>
           <button 

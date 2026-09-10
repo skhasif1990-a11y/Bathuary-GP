@@ -108,12 +108,12 @@ const VILLAGE_ALIAS_MAP: Record<string, string> = {
 
 /**
  * Normalizes any raw village input into one of the 29 canonical Bathuary GP villages.
- * If unrecognized or blank, assigns to primary GP village "BATHUARY" to strictly avoid
- * spurious village generation.
+ * If unrecognized, blank, or missing, assigns to "No Village Name" as per official requirement.
+ * When the village name is updated in the Google Sheet, it dynamically reflects under that village.
  */
 export function normalizeVillageName(rawVillage?: string, fallbackSansad?: string): string {
   if (!rawVillage || typeof rawVillage !== 'string') {
-    return 'BATHUARY';
+    return 'No Village Name';
   }
 
   const cleaned = rawVillage
@@ -121,6 +121,10 @@ export function normalizeVillageName(rawVillage?: string, fallbackSansad?: strin
     .toUpperCase()
     .replace(/[._\-]/g, ' ')
     .replace(/\s+/g, ' ');
+
+  if (!cleaned || cleaned === '—' || cleaned === '-' || cleaned === 'NA' || cleaned === 'N/A' || cleaned === 'NONE' || cleaned === 'NULL' || cleaned === 'NO VILLAGE' || cleaned === 'NO VILLAGE NAME') {
+    return 'No Village Name';
+  }
 
   // 1. Direct match with canonical list
   if (CANONICAL_29_VILLAGES.includes(cleaned)) {
@@ -142,6 +146,6 @@ export function normalizeVillageName(rawVillage?: string, fallbackSansad?: strin
     }
   }
 
-  // 4. If invalid or officer/text column leak (e.g. "SK DAVID", "UNKNOWN"), fallback to BATHUARY
-  return 'BATHUARY';
+  // 4. If invalid or officer/text column leak, return 'No Village Name'
+  return 'No Village Name';
 }

@@ -30,6 +30,7 @@ function loadSavedSheetConfig(): GoogleSheetConfig {
       return {
         sheetUrl: parsed.sheetUrl || "",
         autoSync: parsed.autoSync !== false,
+        appsScriptUrl: parsed.appsScriptUrl || "",
         lastSyncTimestamp: parsed.lastSyncTimestamp || "",
         totalRecords: Number(parsed.totalRecords || 0),
         villagesCount: Number(parsed.villagesCount || 0),
@@ -44,6 +45,7 @@ function loadSavedSheetConfig(): GoogleSheetConfig {
   return {
     sheetUrl: "",
     autoSync: true,
+    appsScriptUrl: "",
     lastSyncTimestamp: "",
     totalRecords: 0,
     villagesCount: 0,
@@ -207,8 +209,8 @@ function parseAndMapSheetRows(rawData: any[][]): BeneficiaryRow[] {
       }
     }
 
-    const rawVillage = get('colV', 21) || get('colV', 20) || 'BATHUARY';
-    // Strictly normalize to one of the 29 canonical villages
+    const rawVillage = get('colV', 21) || get('colV', 20) || '';
+    // Strictly normalize to one of the 29 canonical villages or 'No Village Name'
     const normalizedVillage = normalizeVillageName(rawVillage, rawSansad);
     // Strictly normalize to one of the 16 canonical Sansads of Bathuary GP (BATHUARY 1 to BATHUARY 16)
     const normalizedSansad = normalizeSansadName(rawSansad, normalizedVillage) || 'BATHUARY 1';
@@ -228,7 +230,7 @@ function parseAndMapSheetRows(rawData: any[][]): BeneficiaryRow[] {
       colB: normalizedSansad,
       colC: get('colC', 2) || String(parsed.length + 1),
       colD: get('colD', 3) || 'PURBA MEDINIPUR',
-      colE: get('colE', 4) || 'EGRA-II',
+      colE: get('colE', 4) || 'EGRA-II DEVELOPMENT BLOCK',
       colF: get('colF', 5) || 'BATHUARY',
       colH: jobCard || `WB-14-012-005-001/${10000 + parsed.length}`,
       colI: get('colI', 8) || '1',
@@ -241,12 +243,13 @@ function parseAndMapSheetRows(rawData: any[][]): BeneficiaryRow[] {
       colP: aadhaarClean,
       colQ: mobileClean,
       colR: isKycDone ? 'Yes' : 'No',
-      colS: formatKycDate(get('colS', 18)) || (isKycDone ? new Date().toLocaleDateString('en-GB') : ''),
+      colS: formatKycDate(get('colS', 18)) || '',
       colT: get('colT', 19) || '',
       colU: get('colU', 20) || 'SK DAVID, VLE',
       colV: normalizedVillage,
       colW: get('colW', 22) || 'Yes',
       colX: get('colX', 23) || '',
+      colY: get('colY', 24) || '',
       colAF: get('colAF', 31).toUpperCase(),
       colAG: get('colAG', 32).toUpperCase() || (name || '').toUpperCase(),
       ...(() => {
@@ -751,21 +754,23 @@ app.post("/api/beneficiaries/update", async (req: Request, res: Response) => {
 
     const idx = rowIndex - 2;
     if (idx >= 0 && idx < beneficiariesCache.length) {
+      // Surgical atomic update of the targeted row ONLY - no other row or unedited cell is affected
       beneficiariesCache[idx] = {
         ...beneficiariesCache[idx],
-        colP: formData.colP || beneficiariesCache[idx].colP,
-        colQ: formData.colQ || beneficiariesCache[idx].colQ,
-        colR: formData.colR || beneficiariesCache[idx].colR,
-        colS: formData.colS || beneficiariesCache[idx].colS,
-        colT: formData.colT ?? beneficiariesCache[idx].colT,
-        colU: formData.colU || beneficiariesCache[idx].colU,
-        colV: formData.colV || beneficiariesCache[idx].colV,
-        colW: formData.colW || beneficiariesCache[idx].colW,
-        colX: formData.colX ?? beneficiariesCache[idx].colX,
-        colAO: formData.colAO || beneficiariesCache[idx].colAO,
-        colAP: formData.colAP || beneficiariesCache[idx].colAP,
-        colAQ: formData.colAQ || beneficiariesCache[idx].colAQ,
-        colAR: formData.colAR || beneficiariesCache[idx].colAR
+        colP: formData.colP !== undefined ? formData.colP : beneficiariesCache[idx].colP,
+        colQ: formData.colQ !== undefined ? formData.colQ : beneficiariesCache[idx].colQ,
+        colR: formData.colR !== undefined ? formData.colR : beneficiariesCache[idx].colR,
+        colS: formData.colS !== undefined ? formData.colS : beneficiariesCache[idx].colS,
+        colT: formData.colT !== undefined ? formData.colT : beneficiariesCache[idx].colT,
+        colU: formData.colU !== undefined ? formData.colU : beneficiariesCache[idx].colU,
+        colV: formData.colV !== undefined ? formData.colV : beneficiariesCache[idx].colV,
+        colW: formData.colW !== undefined ? formData.colW : beneficiariesCache[idx].colW,
+        colX: formData.colX !== undefined ? formData.colX : beneficiariesCache[idx].colX,
+        colY: formData.colY !== undefined ? formData.colY : (beneficiariesCache[idx].colY || ''),
+        colAO: formData.colAO !== undefined ? formData.colAO : beneficiariesCache[idx].colAO,
+        colAP: formData.colAP !== undefined ? formData.colAP : beneficiariesCache[idx].colAP,
+        colAQ: formData.colAQ !== undefined ? formData.colAQ : beneficiariesCache[idx].colAQ,
+        colAR: formData.colAR !== undefined ? formData.colAR : beneficiariesCache[idx].colAR
       };
 
       // Add to audit trail
@@ -786,16 +791,63 @@ app.post("/api/beneficiaries/update", async (req: Request, res: Response) => {
         const sheetId = docMatch ? docMatch[1] : "";
         const gid = gidMatch ? gidMatch[1] : "0";
         if (sheetId) {
-          googleSheetRowUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/edit#gid=${gid}&range=A${rowIndex}:AR${rowIndex}`;
+          googleSheetRowUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/edit#gid=${gid}&range=P${rowIndex}:Y${rowIndex}`;
         }
       }
 
       saveBeneficiariesToDisk(beneficiariesCache);
 
+      // Attempt live surgical push to Google Sheet if Google Apps Script Webhook is active
+      let googleSheetSynced = false;
+      let googleSheetMessage = "";
+      const cfg = loadSavedSheetConfig();
+      const scriptUrl = cfg.appsScriptUrl || process.env.GOOGLE_APPS_SCRIPT_URL;
+
+      if (scriptUrl) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 6000);
+          const gasRes = await fetch(scriptUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "updateRow",
+              rowIndex,
+              colH: beneficiariesCache[idx].colH,
+              colJ: beneficiariesCache[idx].colJ,
+              colP: beneficiariesCache[idx].colP,
+              colQ: beneficiariesCache[idx].colQ,
+              colR: beneficiariesCache[idx].colR,
+              colS: beneficiariesCache[idx].colS,
+              colT: beneficiariesCache[idx].colT,
+              colU: beneficiariesCache[idx].colU,
+              colV: beneficiariesCache[idx].colV,
+              colW: beneficiariesCache[idx].colW,
+              colX: beneficiariesCache[idx].colX,
+              colY: beneficiariesCache[idx].colY,
+              colAO: beneficiariesCache[idx].colAO,
+              colAP: beneficiariesCache[idx].colAP,
+              colAQ: beneficiariesCache[idx].colAQ,
+              colAR: beneficiariesCache[idx].colAR
+            }),
+            signal: controller.signal
+          });
+          clearTimeout(timer);
+          if (gasRes.ok) {
+            googleSheetSynced = true;
+            googleSheetMessage = `Row ${rowIndex} updated in Google Sheet`;
+          }
+        } catch (gasErr: any) {
+          googleSheetMessage = gasErr.message;
+        }
+      }
+
       return res.json({
         status: "success",
         message: "Data saved and verified successfully in database!",
         googleSheetRowUrl,
+        googleSheetSynced,
+        googleSheetMessage,
         record: beneficiariesCache[idx]
       });
     } else {
@@ -1131,7 +1183,7 @@ app.post("/api/ai/audit", async (req: Request, res: Response) => {
   }
 
   try {
-    const prompt = `You are the official AI Data Quality Auditor for West Bengal Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) Job Card & e-KYC System.
+    const prompt = `You are the official AI Data Quality Auditor for West Bengal Bathuary Gram Panchayat (Egra-II Development Block, Purba Medinipur) Job Card & e-KYC System.
 Examine this MGNREGA / VB-G RAM G citizen record:
 - Job Card No: ${beneficiary.colH}
 - Applicant Name: ${beneficiary.colJ}
@@ -1234,16 +1286,16 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
 
     if (lower.includes('village') || lower.includes('গ্রাম') || lower.includes('সংসদ') || lower.includes('sansad')) {
       if (isBengali) {
-        return `বাথুয়ারী গ্রাম পঞ্চায়েতে (এগরা-২ ব্লক, পূর্ব মেদিনীপুর) মোট **২৯টি গ্রাম** এবং **১৬টি সংসদ** (BATHUARY 1 থেকে BATHUARY 16) রয়েছে।\n\n২৯টি গ্রামের সম্পূর্ণ তালিকা:\n${BATHUARY_CANONICAL_VILLAGES.join(', ')}।\n\n(উল্লেখ্য: বাথুয়ারী গ্রাম পঞ্চায়েত পূর্ব মেদিনীপুর জেলার এগরা মহকুমার অন্তর্গত)।`;
+        return `বাথুয়ারী গ্রাম পঞ্চায়েতে (এগরা-২ ডেভেলপমেন্ট ব্লক, পূর্ব মেদিনীপুর) মোট **২৯টি গ্রাম** এবং **১৬টি সংসদ** (BATHUARY 1 থেকে BATHUARY 16) রয়েছে।\n\n২৯টি গ্রামের সম্পূর্ণ তালিকা:\n${BATHUARY_CANONICAL_VILLAGES.join(', ')}।\n\n(উল্লেখ্য: বাথুয়ারী গ্রাম পঞ্চায়েত পূর্ব মেদিনীপুর জেলার এগরা মহকুমার অন্তর্গত)।`;
       }
-      return `Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) comprises **29 Canonical Villages** and **16 Sansads** (BATHUARY 1 to BATHUARY 16).\n\nOfficial 29 Villages:\n${BATHUARY_CANONICAL_VILLAGES.join(', ')}.`;
+      return `Bathuary Gram Panchayat (Egra-II Development Block, Purba Medinipur) comprises **29 Canonical Villages** and **16 Sansads** (BATHUARY 1 to BATHUARY 16).\n\nOfficial 29 Villages:\n${BATHUARY_CANONICAL_VILLAGES.join(', ')}.`;
     }
 
     if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়') || lower.includes('কোথায়') || lower.includes('where')) {
       if (isBengali) {
-        return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত সরকারি তথ্য:\n• অফিস ঠিকানা: গ্রাম - হাটবাইঞ্চা / বাথুয়ারী, ডাকঘর - বাথুয়ারী, থানা - এগরা, ব্লক - এগরা-২, জেলা - পূর্ব মেদিনীপুর, পিন কোড - ৭২১৪৪৮।\n• ইমেইল: bathuarygp@gmail.com\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা (সরকারি ছুটির দিন ছাড়া)।\n• দায়িত্বপ্রাপ্ত প্রধান আধিকারিকগণ: পঞ্চায়েত প্রধান, সচিব (শ্রী সুপ্রভাত পড়ুয়া), এবং জিআরএস (শ্রী মানিক দাস)।`;
+        return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত সরকারি তথ্য:\n• অফিস ঠিকানা: গ্রাম - হাটবাইঞ্চা / বাথুয়ারী, ডাকঘর - বাথুয়ারী, থানা - এগরা, ব্লক - এগরা-২ ডেভেলপমেন্ট ব্লক, জেলা - পূর্ব মেদিনীপুর, পিন কোড - ৭২১৪৪৮।\n• ইমেইল: bathuarygp@gmail.com\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা (সরকারি ছুটির দিন ছাড়া)।\n• দায়িত্বপ্রাপ্ত প্রধান আধিকারিকগণ: পঞ্চায়েত প্রধান, সচিব (শ্রী সুপ্রভাত পড়ুয়া), এবং জিআরএস (শ্রী মানিক দাস)।`;
       }
-      return `Bathuary Gram Panchayat Office Information:\n• Address: Village - Hatbaincha / Bathuary, P.O. - Bathuary, P.S. - Egra, Block - Egra-II, District - Purba Medinipur, West Bengal - 721448.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan, Secretary (Suprabhat Parua), GRS (Manik Das), VLE (Sk David & Niranjan Pradhan).`;
+      return `Bathuary Gram Panchayat Office Information:\n• Address: Village - Hatbaincha / Bathuary, P.O. - Bathuary, P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721448.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan, Secretary (Suprabhat Parua), GRS (Manik Das), VLE (Sk David & Niranjan Pradhan).`;
     }
 
     if (lower.includes('abps') || lower.includes('এবিপিএস') || lower.includes('payment') || lower.includes('মজুরি') || lower.includes('wage') || lower.includes('টাকা')) {
@@ -1261,9 +1313,9 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     }
 
     if (isBengali) {
-      return `নমস্কার! আমি বাথুয়ারী গ্রাম পঞ্চায়েত (এগরা-২ ব্লক, পূর্ব মেদিনীপুর) ভার্চুয়াল এআই হেল্পডেস্ক অ্যাসিস্ট্যান্ট।\nবর্তমানে পোর্টালে মোট ${totalCount} জন উপভোক্তার তথ্য সংরক্ষিত রয়েছে (ই-কেওয়াইসি সম্পন্ন: ${doneCount} জন, বাকি: ${pendingCount} জন)।\nআপনি ২৯টি গ্রাম, ১৬টি সংসদ, আধার ও মোবাইল নম্বর আপডেট, ব্যাংক IFSC মার্জার, এবিপিএস (ABPS) বা অফিস সময় সম্পর্কে যেকোনো প্রশ্ন করতে পারেন।`;
+      return `নমস্কার! আমি বাথুয়ারী গ্রাম পঞ্চায়েত (এগরা-২ ডেভেলপমেন্ট ব্লক, পূর্ব মেদিনীপুর) ভার্চুয়াল এআই হেল্পডেস্ক অ্যাসিস্ট্যান্ট।\nবর্তমানে পোর্টালে মোট ${totalCount} জন উপভোক্তার তথ্য সংরক্ষিত রয়েছে (ই-কেওয়াইসি সম্পন্ন: ${doneCount} জন, বাকি: ${pendingCount} জন)।\nআপনি ২৯টি গ্রাম, ১৬টি সংসদ, আধার ও মোবাইল নম্বর আপডেট, ব্যাংক IFSC মার্জার, এবিপিএস (ABPS) বা অফিস সময় সম্পর্কে যেকোনো প্রশ্ন করতে পারেন।`;
     }
-    return `Hello! I am the Bathuary Gram Panchayat (Egra-II Block, Purba Medinipur) Virtual AI Helpdesk Assistant.\nCurrently ${totalCount} beneficiaries are registered (${doneCount} e-KYC Done, ${pendingCount} Pending).\nYou can ask about the 29 villages, 16 Sansads, Aadhaar & Mobile update, Bank IFSC merger, ABPS activation, or office details.`;
+    return `Hello! I am the Bathuary Gram Panchayat (Egra-II Development Block, Purba Medinipur) Virtual AI Helpdesk Assistant.\nCurrently ${totalCount} beneficiaries are registered (${doneCount} e-KYC Done, ${pendingCount} Pending).\nYou can ask about the 29 villages, 16 Sansads, Aadhaar & Mobile update, Bank IFSC merger, ABPS activation, or office details.`;
   };
 
   if (!ai) {
@@ -1279,7 +1331,7 @@ OFFICIAL VERIFIED PANCHAYAT GROUND TRUTH:
 - Block: এগরা-২ ডেভেলপমেন্ট ব্লক (Egra-II Development Block)
 - Sub-Division: এগরা (Egra)
 - District: পূর্ব মেদিনীপুর (Purba Medinipur), পশ্চিমবঙ্গ (West Bengal)
-- CRITICAL GEOGRAPHY RULE: Bathuary GP is in PURBA MEDINIPUR district, Egra-II Block. Never mention North 24 Parganas, Swarupnagar, Dhaltitha, or any unrelated area!
+- CRITICAL GEOGRAPHY RULE: Bathuary GP is in PURBA MEDINIPUR district, Egra-II Development Block. Never mention North 24 Parganas, Swarupnagar, Dhaltitha, or any unrelated area!
 - Post Office: বাথুয়ারী (Bathuary)
 - Office Location: হাটবাইঞ্চা / বাথুয়ারী গ্রাম, ডাকঘর: বাথুয়ারী, থানা: এগরা, জেলা: পূর্ব মেদিনীপুর, পিন: ৭২১৪৪৮ (Hatbaincha / Bathuary Village, P.O. Bathuary, P.S. Egra, Dist: Purba Medinipur, PIN 721448)
 - Official Email: bathuarygp@gmail.com

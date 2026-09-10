@@ -23,7 +23,7 @@ import { formatKycDate } from '../utils/dateFormatter';
 
 interface VillagePdfReportProps {
   beneficiaries: BeneficiaryRow[];
-  initialCategoryFilter?: 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH' | null;
+  initialCategoryFilter?: 'ALL' | 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH' | 'UNIQUE_CARDS' | null;
   initialSansadFilter?: string;
   onPrintSlip: (row: BeneficiaryRow) => void;
   onPrintA5Slip: (row: BeneficiaryRow) => void;
@@ -40,7 +40,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
   const [selectedVillage, setSelectedVillage] = useState<string>('');
   const [selectedSansad, setSelectedSansad] = useState<string>(initialSansadFilter || '');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH'>(
+  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH' | 'UNIQUE_CARDS'>(
     initialCategoryFilter || 'ALL'
   );
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -69,7 +69,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
   const filteredRows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
-    return beneficiaries.filter(row => {
+    let rows = beneficiaries.filter(row => {
       // Village filter
       if (selectedVillage && row.colV !== selectedVillage) {
         return false;
@@ -100,13 +100,27 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
         const name = (row.colJ || '').toLowerCase();
         const aadh = (row.colP || '').toLowerCase();
         const hoh = (row.colAG || '').toLowerCase();
-        if (!jc.includes(term) && !name.includes(term) && !aadh.includes(term) && !hoh.includes(term)) {
+        const foh = (row.colAF || '').toLowerCase();
+        const vill = (row.colV || '').toLowerCase();
+        if (!jc.includes(term) && !name.includes(term) && !aadh.includes(term) && !hoh.includes(term) && !foh.includes(term) && !vill.includes(term)) {
           return false;
         }
       }
 
       return true;
     });
+
+    if (selectedCategory === 'UNIQUE_CARDS') {
+      const seen = new Set<string>();
+      rows = rows.filter(r => {
+        const jc = (r.colH || '').trim();
+        if (!jc || seen.has(jc)) return false;
+        seen.add(jc);
+        return true;
+      });
+    }
+
+    return rows;
   }, [beneficiaries, selectedVillage, selectedSansad, selectedCategory, searchTerm]);
 
   // Total pages
@@ -331,6 +345,8 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
               className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl px-3 py-2 border-2 border-slate-200 focus:border-amber-500 focus:bg-white focus:outline-none transition-all cursor-pointer"
             >
               <option value="ALL">All Records ({beneficiaries.length})</option>
+              <option value="UNIQUE_CARDS">💳 Total Job Card (Unique Cards)</option>
+              <option value="TOTAL">👥 Total Job Card Workers</option>
               <option value="DONE">✓ e-KYC Completed</option>
               <option value="PENDING">⏳ e-KYC Pending</option>
               <option value="DEATH">✕ Expired / Deceased</option>
@@ -558,17 +574,29 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
         <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full text-left border-collapse print:text-black">
             <thead className="bg-slate-900 text-white sticky top-0 z-10 font-sans print:bg-slate-100 print:text-black print:table-header-group">
-              <tr className="print:border-b-2 print:border-slate-900">
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-10 text-center print:border-slate-800 print:text-[8pt] print:p-1.5">Sl</th>
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-24 print:border-slate-800 print:text-[8pt] print:p-1.5">Sansad</th>
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-44 print:border-slate-800 print:text-[8pt] print:p-1.5">Job Card No</th>
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 print:border-slate-800 print:text-[8pt] print:p-1.5">Applicant Name</th>
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 print:border-slate-800 print:text-[8pt] print:p-1.5">Head of Household</th>
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-32 print:border-slate-800 print:text-[8pt] print:p-1.5">Village</th>
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-28 print:border-slate-800 print:text-[8pt] print:p-1.5">Aadhaar</th>
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 text-center w-24 print:border-slate-800 print:text-[8pt] print:p-1.5">e-KYC</th>
-                <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider text-center no-print w-36">Action</th>
-              </tr>
+              {selectedCategory === 'UNIQUE_CARDS' ? (
+                <tr className="print:border-b-2 print:border-slate-900">
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-12 text-center print:border-slate-800 print:text-[8pt] print:p-1.5">Sl No</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-28 print:border-slate-800 print:text-[8pt] print:p-1.5">Sansad Name & No</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-44 print:border-slate-800 print:text-[8pt] print:p-1.5">Job Card Number</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 print:border-slate-800 print:text-[8pt] print:p-1.5">Head Of House Hold</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 print:border-slate-800 print:text-[8pt] print:p-1.5">Father&apos;s/Husband&apos;s Name of HH</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-36 print:border-slate-800 print:text-[8pt] print:p-1.5">Village Name</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider text-center no-print w-32">Action</th>
+                </tr>
+              ) : (
+                <tr className="print:border-b-2 print:border-slate-900">
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-10 text-center print:border-slate-800 print:text-[8pt] print:p-1.5">Sl</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-24 print:border-slate-800 print:text-[8pt] print:p-1.5">Sansad</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-44 print:border-slate-800 print:text-[8pt] print:p-1.5">Job Card No</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 print:border-slate-800 print:text-[8pt] print:p-1.5">Applicant Name</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 print:border-slate-800 print:text-[8pt] print:p-1.5">Head of Household</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-32 print:border-slate-800 print:text-[8pt] print:p-1.5">Village</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 w-28 print:border-slate-800 print:text-[8pt] print:p-1.5">Aadhaar</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider border-r border-slate-800 text-center w-24 print:border-slate-800 print:text-[8pt] print:p-1.5">e-KYC</th>
+                  <th className="p-2.5 sm:p-3 text-[10px] font-black uppercase tracking-wider text-center no-print w-36">Action</th>
+                </tr>
+              )}
             </thead>
             {/* SCREEN VIEW TBODY: Always renders paginatedRows for instant, ultra-fast tab switching */}
             <tbody className="divide-y divide-slate-200 text-xs print:hidden">
@@ -576,6 +604,30 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                 const absoluteIndex = pageSize === -1 ? idx + 1 : (currentPage - 1) * pageSize + idx + 1;
                 const isDone = (row.colR || '').toUpperCase() === 'YES' || (row.colR || '').toUpperCase() === 'Y';
                 const isDead = (row.colT || '').toLowerCase().includes('death') || (row.colT || '').toLowerCase().includes('expired');
+
+                if (selectedCategory === 'UNIQUE_CARDS') {
+                  return (
+                    <tr key={`${row.colH}-${idx}`} className="hover:bg-purple-50/60 bg-white transition-colors">
+                      <td className="p-2.5 sm:p-3 text-center font-bold text-slate-600 border-r border-slate-200">{absoluteIndex}</td>
+                      <td className="p-2.5 sm:p-3 font-black text-slate-900 border-r border-slate-200 whitespace-nowrap">{row.colB || '—'}</td>
+                      <td className="p-2.5 sm:p-3 font-mono font-black text-purple-700 border-r border-slate-200 whitespace-nowrap">{row.colH}</td>
+                      <td className="p-2.5 sm:p-3 font-black text-slate-950 uppercase border-r border-slate-200">{row.colAG || '—'}</td>
+                      <td className="p-2.5 sm:p-3 text-slate-700 uppercase font-medium border-r border-slate-200">{row.colAF || '—'}</td>
+                      <td className="p-2.5 sm:p-3 text-slate-800 font-bold border-r border-slate-200 whitespace-nowrap">{row.colV || '—'}</td>
+                      <td className="p-2.5 sm:p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => onPrintA5Slip(row)}
+                          className="px-3 py-1.5 rounded-xl btn-3d-jobcard text-white font-black text-[11px] flex items-center justify-center gap-1 mx-auto cursor-pointer shadow-xs hover:shadow-md transition-all whitespace-nowrap"
+                          title="Official Job Card Print"
+                        >
+                          <FileCheck className="w-3.5 h-3.5" />
+                          <span>Job Card</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
 
                 return (
                   <tr 
@@ -635,7 +687,7 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
               })}
               {filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="p-10 text-center text-slate-500 font-semibold">
+                  <td colSpan={selectedCategory === 'UNIQUE_CARDS' ? 7 : 9} className="p-10 text-center text-slate-500 font-semibold">
                     No beneficiary records found matching the selected filters.
                   </td>
                 </tr>
@@ -649,6 +701,19 @@ export const VillagePdfReport: React.FC<VillagePdfReportProps> = ({
                   const absoluteIndex = printScope === 'ALL' ? idx + 1 : ((currentPage - 1) * pageSize + idx + 1);
                   const isDone = (row.colR || '').toUpperCase() === 'YES' || (row.colR || '').toUpperCase() === 'Y';
                   const isDead = (row.colT || '').toLowerCase().includes('death') || (row.colT || '').toLowerCase().includes('expired');
+
+                  if (selectedCategory === 'UNIQUE_CARDS') {
+                    return (
+                      <tr key={`print-uc-${row.colH}-${idx}`} className="print:bg-transparent print:break-inside-avoid">
+                        <td className="p-1.5 text-center font-bold text-black border-r border-slate-300">{absoluteIndex}</td>
+                        <td className="p-1.5 font-bold text-black border-r border-slate-300 whitespace-nowrap">{row.colB}</td>
+                        <td className="p-1.5 font-mono font-bold text-black border-r border-slate-300 whitespace-nowrap">{row.colH}</td>
+                        <td className="p-1.5 font-bold text-black uppercase border-r border-slate-300">{row.colAG || '—'}</td>
+                        <td className="p-1.5 text-black uppercase border-r border-slate-300">{row.colAF || '—'}</td>
+                        <td className="p-1.5 text-black font-bold border-r border-slate-300 whitespace-nowrap">{row.colV}</td>
+                      </tr>
+                    );
+                  }
 
                   return (
                     <tr key={`print-${row.colH}-${idx}`} className="print:bg-transparent print:break-inside-avoid">

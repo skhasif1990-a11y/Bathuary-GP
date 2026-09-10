@@ -49,7 +49,7 @@ export const PolicyAndSecurity: React.FC<PolicyAndSecurityProps> = () => {
           </div>
           <div className="bg-white/5 p-2.5 rounded-xl border border-white/10">
             <span className="text-[10px] font-bold text-slate-400 uppercase block">Jurisdiction</span>
-            <span className="text-sm font-black text-amber-300">Egra-II Block, WB</span>
+            <span className="text-sm font-black text-amber-300">Egra-II Development Block, WB</span>
           </div>
         </div>
       </div>
@@ -143,7 +143,7 @@ export const PolicyAndSecurity: React.FC<PolicyAndSecurityProps> = () => {
             <div>
               <span className="text-[10px] text-slate-500 block font-bold uppercase tracking-wider">Field Headquarters:</span>
               <span className="font-black text-slate-900 text-sm block">
-                Hatbaincha, Egra-II Block, Purba Medinipur
+                Hatbaincha, Egra-II Development Block, Purba Medinipur
               </span>
             </div>
           </div>

@@ -24,6 +24,7 @@ export interface BeneficiaryRow {
   colV: string; // Village Name
   colW: string; // Job Card Submitted to Office
   colX: string; // Remark
+  colY?: string; // Job Card Book Delivered (Yes/No)
   colAF: string; // Father/Husband Name of HH
   colAG: string; // Head of Household
   colAO: string; // Bank Name
@@ -75,6 +76,7 @@ export interface AuditLog {
 
 export interface AnalyticsData {
   total: number;
+  uniqueJobCards?: number;
   done: number;
   pending: number;
   death: number;
@@ -94,9 +96,12 @@ export interface VillageStat {
   death: number;
 }
 
+export type ReportCategoryFilter = 'ALL' | 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH' | 'UNIQUE_CARDS';
+
 export interface GoogleSheetConfig {
   sheetUrl: string;
   autoSync: boolean;
+  appsScriptUrl?: string;
   lastSyncTimestamp?: string;
   totalRecords?: number;
   villagesCount?: number;

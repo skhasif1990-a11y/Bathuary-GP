@@ -126,11 +126,15 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
       .filter(b => {
         // Match 12-digit or partial Aadhaar
         const aadhaarDigits = (b.colP || '').replace(/\D/g, '');
-        if (digitsOnly && aadhaarDigits.includes(digitsOnly)) return true;
+        if (digitsOnly && (aadhaarDigits.includes(digitsOnly) || digitsOnly.includes(aadhaarDigits))) return true;
 
         // Match 10-digit or partial Mobile Phone
         const phoneDigits = (b.colQ || '').replace(/\D/g, '');
-        if (digitsOnly && phoneDigits.includes(digitsOnly)) return true;
+        if (digitsOnly && (phoneDigits.includes(digitsOnly) || digitsOnly.includes(phoneDigits))) return true;
+
+        // Match raw strings in case of dashes, spaces or masks
+        if (b.colP && b.colP.toLowerCase().includes(lower)) return true;
+        if (b.colQ && b.colQ.toLowerCase().includes(lower)) return true;
 
         // Match Applicant Name
         if (b.colJ && b.colJ.toLowerCase().includes(lower)) return true;
@@ -138,9 +142,12 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
         // Match Job Card
         if (b.colH && b.colH.toLowerCase().includes(lower)) return true;
 
+        // Match Village Name
+        if (b.colV && b.colV.toLowerCase().includes(lower)) return true;
+
         return false;
       })
-      .slice(0, 35);
+      .slice(0, 50);
   }, [beneficiaries, aadhaarSearch]);
 
   // Standard RBI 4-letter IFSC Bank Map for instant auto-resolution (includes merged entities)
@@ -292,13 +299,15 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
           colAR_confirm: match.colAR || ''
         });
         setSelectedAadhaar(match.colP || '');
-        setAadhaarSearch(match.colP || '');
+        if (!isAadhaarOpen) {
+          setAadhaarSearch(match.colP || match.colQ || match.colH || '');
+        }
         setJobCardSearch(match.colH || '');
       }
     } else {
       setActiveRow(null);
     }
-  }, [selectedJobCard, selectedApplicant, beneficiaries, currentUser, bankMaster]);
+  }, [selectedJobCard, selectedApplicant, beneficiaries, currentUser, bankMaster, isAadhaarOpen]);
 
   // Selection handlers
   const handleSelectJobCardMatch = (cardNo: string, applicantName?: string) => {
@@ -330,24 +339,16 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
     setIsAadhaarOpen(true);
     const clean = val.replace(/\D/g, '');
     setSelectedAadhaar(clean);
-    
-    // Auto-fill active row if exact match is found, but keep dropdown visible so results are never hidden
-    if (clean.length === 12) {
-      const match = beneficiaries.find(b => (b.colP || '').replace(/\D/g, '') === clean);
-      if (match) {
-        setSelectedJobCard(match.colH);
-        setJobCardSearch(match.colH);
-        setSelectedApplicant(match.colJ);
-        setActiveRow(match);
+  };
+
+  const handleAadhaarKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredAadhaarRecords.length > 0) {
+        handleSelectAadhaarMatch(filteredAadhaarRecords[0]);
       }
-    } else if (clean.length === 10) {
-      const match = beneficiaries.find(b => (b.colQ || '').replace(/\D/g, '') === clean);
-      if (match) {
-        setSelectedJobCard(match.colH);
-        setJobCardSearch(match.colH);
-        setSelectedApplicant(match.colJ);
-        setActiveRow(match);
-      }
+    } else if (e.key === 'Escape') {
+      setIsAadhaarOpen(false);
     }
   };
 
@@ -648,6 +649,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                 value={aadhaarSearch}
                 onFocus={() => setIsAadhaarOpen(true)}
                 onChange={(e) => handleAadhaarInputChange(e.target.value)}
+                onKeyDown={handleAadhaarKeyDown}
                 className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold rounded-xl pl-9 pr-8 py-2 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white focus:outline-none transition-all shadow-2xs"
               />
               <button

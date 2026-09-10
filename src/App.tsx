@@ -48,7 +48,7 @@ export default function App() {
   const [selectedSansad, setSelectedSansad] = useState<string>('ALL');
 
   // Active Category Filter for Reports
-  const [categoryFilter, setCategoryFilter] = useState<'TOTAL' | 'DONE' | 'PENDING' | 'DEATH' | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<'TOTAL' | 'DONE' | 'PENDING' | 'DEATH' | 'UNIQUE_CARDS' | null>(null);
 
   // Modals
   const [printRow, setPrintRow] = useState<BeneficiaryRow | null>(null);
@@ -363,7 +363,7 @@ export default function App() {
   };
 
   // Switch to report by category
-  const handleSelectCategoryReport = (type: 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH') => {
+  const handleSelectCategoryReport = (type: 'TOTAL' | 'DONE' | 'PENDING' | 'DEATH' | 'UNIQUE_CARDS') => {
     setCategoryFilter(type);
     setCurrentTab('reports');
   };
@@ -447,6 +447,7 @@ export default function App() {
               onSelectCategoryReport={handleSelectCategoryReport}
               onOpenSyncModal={() => setIsSyncModalOpen(true)}
               language={language}
+              beneficiaries={filteredBeneficiaries}
             />
           )}
 

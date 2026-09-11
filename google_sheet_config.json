@@ -1,10 +1,11 @@
 {
-  "sheetUrl": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
+  "sheetUrl": "https://docs.google.com/spreadsheets/d/1fCKKSgYo6LphZs39JURZIDZtAYBiH9JPgjOyS3Xu-PU/edit?usp=sharing",
   "autoSync": true,
-  "lastSyncTimestamp": "2026-09-09T08:53:28.719Z",
+  "appsScriptUrl": "",
+  "lastSyncTimestamp": "2026-09-11T08:08:30.842Z",
   "totalRecords": 8017,
-  "villagesCount": 28,
+  "villagesCount": 29,
   "sansadsCount": 16,
-  "savedAt": "2026-09-09T08:11:34.368Z",
-  "updatedAt": "2026-09-09T09:01:40.896Z"
+  "savedAt": "2026-09-10T10:00:00.000Z",
+  "updatedAt": "2026-09-11T08:08:30.883Z"
 }

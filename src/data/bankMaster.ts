@@ -118,6 +118,7 @@ export const INITIAL_BANK_MASTER: BankMasterItem[] = [
   { bank: "PUNJAB NATIONAL BANK", branch: "EGRA", ifsc: "PUNB0019020", district: "PURBA MEDINIPUR", legacyIfsc: "UTBI0EGR276" },
   { bank: "PUNJAB NATIONAL BANK", branch: "EGRA BAZAR", ifsc: "PUNB0024720", district: "PURBA MEDINIPUR" },
   { bank: "PUNJAB NATIONAL BANK", branch: "BATHUARY", ifsc: "PUNB0145220", district: "PURBA MEDINIPUR" },
+  { bank: "PUNJAB NATIONAL BANK", branch: "LABANYA BAZAR", ifsc: "PUNB0118620", district: "PURBA MEDINIPUR", legacyIfsc: "UTBI0LBB772" },
   { bank: "PUNJAB NATIONAL BANK", branch: "CONTAI", ifsc: "PUNB0018220", district: "PURBA MEDINIPUR", legacyIfsc: "UTBI0CNT240" },
   { bank: "PUNJAB NATIONAL BANK", branch: "CONTAI MAJNA ROAD", ifsc: "PUNB0220420", district: "PURBA MEDINIPUR" },
   { bank: "PUNJAB NATIONAL BANK", branch: "CONTAI NEW CINEMA ROAD", ifsc: "PUNB0141100", district: "PURBA MEDINIPUR" },
@@ -190,6 +191,7 @@ export const INITIAL_BANK_MASTER: BankMasterItem[] = [
   { bank: "INDIAN BANK", branch: "CONTAI TOWN", ifsc: "IDIB000C070", district: "PURBA MEDINIPUR" },
   { bank: "INDIAN BANK", branch: "DUBDA", ifsc: "IDIB000D582", district: "PURBA MEDINIPUR", legacyIfsc: "ALLA0211686" },
   { bank: "INDIAN BANK", branch: "ALANKARPUR", ifsc: "IDIB000A521", district: "PURBA MEDINIPUR", legacyIfsc: "ALLA0211285" },
+  { bank: "INDIAN BANK", branch: "BALIGHAI", ifsc: "IDIB000B571", district: "PURBA MEDINIPUR", legacyIfsc: "ALLA0210606" },
   { bank: "INDIAN BANK", branch: "BALIGHAI", ifsc: "IDIB000B612", district: "PURBA MEDINIPUR", legacyIfsc: "ALLA0210606" },
   { bank: "INDIAN BANK", branch: "BARDABAR", ifsc: "IDIB000B615", district: "PURBA MEDINIPUR", legacyIfsc: "ALLA0213349" },
   { bank: "INDIAN BANK", branch: "BIDYAPITH (AJANBARI)", ifsc: "IDIB000B616", district: "PURBA MEDINIPUR", legacyIfsc: "ALLA0211579" },
@@ -615,6 +617,8 @@ export function canonicalizeBankName(raw: string): string {
 
   return clean;
 }
+
+export const normalizeBankName = canonicalizeBankName;
 
 export const BANK_MERGER_MAP: Record<string, { oldBank: string; newBank: string; newIfscPrefix: string }> = {
   UTBI: { oldBank: "United Bank of India", newBank: "Punjab National Bank", newIfscPrefix: "PUNB" },

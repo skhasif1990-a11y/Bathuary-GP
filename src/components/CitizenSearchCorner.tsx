@@ -17,6 +17,7 @@ export const CitizenSearchCorner: React.FC<CitizenSearchCornerProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
 
   const trimmed = searchTerm.trim().toLowerCase();
+  const digitsOnly = trimmed.replace(/\D/g, '');
   const searchResults = trimmed
     ? beneficiaries.filter(b => 
         (b.colH && String(b.colH).toLowerCase().includes(trimmed)) ||
@@ -24,9 +25,11 @@ export const CitizenSearchCorner: React.FC<CitizenSearchCornerProps> = ({
         (b.colAF && String(b.colAF).toLowerCase().includes(trimmed)) ||
         (b.colAG && String(b.colAG).toLowerCase().includes(trimmed)) ||
         (b.colP && String(b.colP).toLowerCase().includes(trimmed)) ||
+        (digitsOnly.length >= 4 && b.colP && b.colP.replace(/\D/g, '').includes(digitsOnly)) ||
         (b.colQ && String(b.colQ).toLowerCase().includes(trimmed)) ||
+        (digitsOnly.length >= 5 && b.colQ && b.colQ.replace(/\D/g, '').includes(digitsOnly)) ||
         (b.colV && String(b.colV).toLowerCase().includes(trimmed))
-      ).slice(0, 20)
+      ).slice(0, 30)
     : [];
 
   const quickFilterChips = [

@@ -385,11 +385,11 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
       return `Bathuary Gram Panchayat (Egra-II Development Block, Purba Medinipur) comprises **29 Canonical Villages** and **16 Sansads** (BATHUARY 1 to BATHUARY 16).\n\nOfficial 29 Villages:\n${canonicalVillages.join(', ')}.`;
     }
 
-    if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়') || lower.includes('কোথায়') || lower.includes('where')) {
+    if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়') || lower.includes('timing') || lower.includes('কোথায়') || lower.includes('where')) {
       if (isBengali) {
-        return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত সরকারি তথ্য:\n• অফিস ঠিকানা: গ্রাম - হাটবাইঞ্চা / বাথুয়ারী, ডাকঘর - বাথুয়ারী, থানা - এগরা, ব্লক - এগরা-২ ডেভেলপমেন্ট ব্লক, জেলা - পূর্ব মেদিনীপুর, পিন কোড - ৭২১৪৪৮।\n• ইমেইল: bathuarygp@gmail.com\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা (সরকারি ছুটির দিন ছাড়া)।\n• দায়িত্বপ্রাপ্ত প্রধান আধিকারিকগণ: পঞ্চায়েত প্রধান, সচিব (শ্রী সুপ্রভাত পড়ুয়া), এবং জিআরএস (শ্রী মানিক দাস)।`;
+        return `Bathuary Gram Panchayat Office Information:\n• Address: Vill+PO - Hatbaincha , P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721422.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan(Pramila Bar), Secretary (Suprabhat Parua), Nirman Sahayak (Prasun Mandal), GRS (Manik Das), VLE (Sk David)।`;
       }
-      return `Bathuary Gram Panchayat Office Information:\n• Address: Village - Hatbaincha / Bathuary, P.O. - Bathuary, P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721448.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan, Secretary (Suprabhat Parua), GRS (Manik Das), VLE (Sk David & Niranjan Pradhan).`;
+      return `Bathuary Gram Panchayat Office Information:\n• Address: Vill+PO - Hatbaincha , P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721422.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan(Pramila Bar), Secretary (Suprabhat Parua), Nirman Sahayak (Prasun Mandal), GRS (Manik Das), VLE (Sk David).`;
     }
 
     if (isBengali) {

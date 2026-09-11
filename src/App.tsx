@@ -11,6 +11,7 @@ import { PolicyAndSecurity } from './components/PolicyAndSecurity';
 import { PrintSlipModal } from './components/PrintSlipModal';
 import { JobCardA5PrintModal } from './components/JobCardA5PrintModal';
 import { GoogleSheetSyncModal } from './components/GoogleSheetSyncModal';
+import { LoginPage } from './components/LoginPage';
 
 import { BeneficiaryRow, AppUser, AnalyticsData, VillageStat, BankMasterItem, AuditLog } from './types';
 import { INITIAL_BENEFICIARIES } from './data/initialRecords';
@@ -28,16 +29,43 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const language = 'en';
 
-  // Default active staff officer session
-  const [currentUser, setCurrentUser] = useState<AppUser>({
-    name: 'SK DAVID',
-    mobile: '9002736997',
-    role: 'ADMIN',
-    sansad: 'ALL',
-    village: 'HATBAINCHA',
-    status: 'ACTIVE',
-    lastLogin: '2026-03-05 10:00:00'
+  // Authentication State (Official login: BATHUARY_002 / Bathuary@2580)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return safeStorage.getItem('bathuary_auth_logged_in') === 'true';
   });
+
+  // Default active staff officer session
+  const [currentUser, setCurrentUser] = useState<AppUser>(() => {
+    const cachedUser = safeStorage.getItem('bathuary_auth_user');
+    if (cachedUser) {
+      try {
+        return JSON.parse(cachedUser);
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      name: 'BATHUARY_002',
+      mobile: '9002736997',
+      role: 'ADMIN',
+      sansad: 'ALL',
+      village: 'HATBAINCHA',
+      status: 'ACTIVE',
+      lastLogin: new Date().toLocaleDateString('en-IN')
+    };
+  });
+
+  const handleLoginSuccess = (user: AppUser) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    safeStorage.removeItem('bathuary_auth_logged_in');
+    safeStorage.removeItem('bathuary_auth_token');
+    safeStorage.removeItem('bathuary_auth_user');
+    setIsAuthenticated(false);
+  };
 
   // Data Store
   const [beneficiaries, setBeneficiaries] = useState<BeneficiaryRow[]>(INITIAL_BENEFICIARIES);
@@ -381,6 +409,16 @@ export default function App() {
     setCurrentTab('reports');
   };
 
+  // If not authenticated, present the Enhanced 3D Official Login Page with Read-Only Badges
+  if (!isAuthenticated) {
+    return (
+      <LoginPage 
+        onLoginSuccess={handleLoginSuccess}
+        beneficiaries={beneficiaries}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex selection:bg-emerald-600 selection:text-white font-sans antialiased">
       {/* 
@@ -405,7 +443,7 @@ export default function App() {
       {/* RIGHT MAIN WORKSPACE (Adjusted for left sidebar) */}
       <div className={`lg:pl-72 flex-1 flex flex-col min-h-screen w-full transition-all duration-300 print:pl-0 print:m-0 print:w-full ${(printRow || printA5Row) ? 'no-print' : ''}`}>
         
-        {/* Header with Branding and Mobile Sidebar Toggle */}
+        {/* Header with Branding, User Profile and Mobile Sidebar Toggle */}
         <Header
           currentTab={currentTab}
           onOpenSidebar={() => setIsSidebarOpen(true)}
@@ -417,6 +455,8 @@ export default function App() {
             villagesCount: new Set(beneficiaries.map(b => b.colV)).size
           }}
           isPermanentlySaved={isSheetPermanentlySaved}
+          currentUser={currentUser}
+          onLogout={handleLogout}
         />
 
         {/* Main Content Area */}

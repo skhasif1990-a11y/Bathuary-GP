@@ -31,6 +31,8 @@ interface HeaderProps {
     villagesCount: number;
   };
   isPermanentlySaved?: boolean;
+  currentUser?: AppUser;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,7 +42,9 @@ export const Header: React.FC<HeaderProps> = ({
   onRefreshData,
   onOpenSyncModal,
   syncedSheetInfo,
-  isPermanentlySaved
+  isPermanentlySaved,
+  currentUser,
+  onLogout
 }) => {
   // Live Clock & Date state
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -174,6 +178,19 @@ export const Header: React.FC<HeaderProps> = ({
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-200' : ''}`} />
               <span className="hidden sm:inline">{isSyncing ? "SYNCING..." : "SYNC"}</span>
             </button>
+
+            {onLogout && (
+              <button
+                id="header-logout-btn"
+                onClick={onLogout}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-rose-950/80 border border-slate-700 hover:border-rose-500/50 text-slate-300 hover:text-rose-200 font-bold text-xs transition-all shadow-md cursor-pointer"
+                title={`Logged in as ${currentUser?.name || 'BATHUARY_002'}. Click to logout.`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse hidden sm:inline" />
+                <span className="font-mono text-emerald-300 text-[11px] hidden md:inline">{currentUser?.name || 'BATHUARY_002'}</span>
+                <span className="text-rose-400 hover:text-rose-200 text-xs font-semibold">Logout</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

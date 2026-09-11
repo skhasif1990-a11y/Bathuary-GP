@@ -8,6 +8,7 @@ import * as XLSX from "xlsx";
 import { INITIAL_BENEFICIARIES } from "./src/data/initialRecords";
 import { INITIAL_USERS } from "./src/data/initialUsers";
 import { INITIAL_BANK_MASTER, VILLAGES_LIST } from "./src/data/bankMaster";
+import { autoFixBankDetails, searchRbiBankMaster } from "./src/utils/rbiBankResolver";
 import { BeneficiaryRow, AppUser, AuditLog, GoogleSheetConfig } from "./src/types";
 import { normalizeVillageName, CANONICAL_29_VILLAGES } from "./src/utils/villageNormalizer";
 import { normalizeSansadName, CANONICAL_16_SANSADS, isHeaderOrJunkSansad, sortSansads } from "./src/utils/sansadNormalizer";
@@ -18,17 +19,58 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Permanent Google Sheet URL provided by Bathuary Gram Panchayat administration
+export const PERMANENT_DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1fCKKSgYo6LphZs39JURZIDZtAYBiH9JPgjOyS3Xu-PU/edit?usp=sharing";
+
 // Persistent Configuration and Cache File Paths
 const CONFIG_FILE_PATH = path.join(process.cwd(), "google_sheet_config.json");
 const BENEFICIARIES_FILE_PATH = path.join(process.cwd(), "beneficiaries_cache.json");
+const AUTH_FILE_PATH = path.join(process.cwd(), "auth_credentials.json");
+
+interface AuthCredentials {
+  username: string;
+  password: string;
+  updatedAt: string;
+}
+
+function loadAuthCredentials(): AuthCredentials {
+  try {
+    if (fs.existsSync(AUTH_FILE_PATH)) {
+      const raw = fs.readFileSync(AUTH_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed.username && parsed.password) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to read auth_credentials.json:", err);
+  }
+  return {
+    username: "BATHUARY_002",
+    password: "Bathuary@2580",
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function saveAuthCredentials(creds: AuthCredentials): void {
+  try {
+    fs.writeFileSync(AUTH_FILE_PATH, JSON.stringify(creds, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to write auth_credentials.json:", err);
+  }
+}
 
 function loadSavedSheetConfig(): GoogleSheetConfig {
   try {
     if (fs.existsSync(CONFIG_FILE_PATH)) {
       const raw = fs.readFileSync(CONFIG_FILE_PATH, "utf-8");
       const parsed = JSON.parse(raw);
+      const url = parsed.sheetUrl && !parsed.sheetUrl.includes("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
+        ? parsed.sheetUrl
+        : PERMANENT_DEFAULT_SHEET_URL;
+
       return {
-        sheetUrl: parsed.sheetUrl || "",
+        sheetUrl: url,
         autoSync: parsed.autoSync !== false,
         appsScriptUrl: parsed.appsScriptUrl || "",
         lastSyncTimestamp: parsed.lastSyncTimestamp || "",
@@ -43,7 +85,7 @@ function loadSavedSheetConfig(): GoogleSheetConfig {
     console.error("Failed to read google_sheet_config.json:", err);
   }
   return {
-    sheetUrl: "",
+    sheetUrl: PERMANENT_DEFAULT_SHEET_URL,
     autoSync: true,
     appsScriptUrl: "",
     lastSyncTimestamp: "",
@@ -141,8 +183,8 @@ function parseAndMapSheetRows(rawData: any[][]): BeneficiaryRow[] {
       row.forEach((colVal, colIdx) => {
         const val = String(colVal || '').toLowerCase().trim();
         if (!val) return;
-        if (val.includes('job') && (val.includes('card') || val.includes('no') || val.includes('num'))) colMap['colH'] = colIdx;
-        else if (val.includes('applicant') && val.includes('name')) colMap['colJ'] = colIdx;
+        if (val === 'job card number' || (val.includes('job') && (val.includes('card') || val.includes('no') || val.includes('num')) && !val.includes('applicant'))) colMap['colH'] = colIdx;
+        else if (val === 'applicant name' || (val.includes('applicant') && val.includes('name') && !val.includes('job card'))) colMap['colJ'] = colIdx;
         else if (val === 'name' || val.includes('beneficiary') || val.includes('worker')) colMap['colJ'] = colIdx;
         else if (val.includes('father') || val.includes('husband')) colMap['colAF'] = colIdx;
         else if (val.includes('head') || val.includes('hoh')) colMap['colAG'] = colIdx;
@@ -254,32 +296,17 @@ function parseAndMapSheetRows(rawData: any[][]): BeneficiaryRow[] {
       colAF: get('colAF', 31).toUpperCase(),
       colAG: get('colAG', 32).toUpperCase() || (name || '').toUpperCase(),
       ...(() => {
-        let bankName = get('colAO', 40).trim().toUpperCase();
-        let ifscCode = get('colAP', 41).trim().toUpperCase();
-        let branchName = get('colAQ', 42).trim().toUpperCase();
+        const rawBank = get('colAO', 40);
+        const rawIfsc = get('colAP', 41);
+        const rawBranch = get('colAQ', 42);
         const accountNo = get('colAR', 43).trim();
 
-        // Detect if ifscCode and branchName are swapped
-        const isBranchAnIfsc = /^[A-Z]{4}0[A-Z0-9]{6}$/.test(branchName) || INITIAL_BANK_MASTER.some(b => b.ifsc === branchName);
-        const isIfscABranch = ifscCode.includes('BRANCH') || ifscCode.includes('MAIN') || ifscCode.includes('BAZAR') || ifscCode.includes('RURAL') || ifscCode.includes('MIDNAPORE');
-
-        if (isBranchAnIfsc || isIfscABranch) {
-          const temp = ifscCode;
-          ifscCode = branchName;
-          branchName = temp;
-        }
-
-        // Cross-reference with INITIAL_BANK_MASTER for auto-fill
-        const matched = INITIAL_BANK_MASTER.find(b => b.ifsc === ifscCode);
-        if (matched) {
-          if (!bankName || bankName === '—') bankName = matched.bank;
-          if (!branchName || branchName === '—') branchName = matched.branch;
-        }
+        const fixed = autoFixBankDetails(rawBank, rawIfsc, rawBranch);
 
         return {
-          colAO: bankName,
-          colAP: ifscCode,
-          colAQ: branchName,
+          colAO: fixed.bank,
+          colAP: fixed.ifsc,
+          colAQ: fixed.branch,
           colAR: accountNo
         };
       })()
@@ -350,6 +377,130 @@ app.get("/api/health", (req: Request, res: Response) => {
     lastSyncTimestamp,
     memoryUsage: process.memoryUsage()
   });
+});
+
+// ----------------------------------------------------------------------------
+// Official Staff Authentication Endpoints
+// (Official credentials: BATHUARY_002 / Bathuary@2580)
+// ----------------------------------------------------------------------------
+app.post("/api/auth/login", (req: Request, res: Response) => {
+  const { username, password } = req.body;
+  const creds = loadAuthCredentials();
+
+  const cleanUser = String(username || "").trim();
+  const cleanPass = String(password || "").trim();
+
+  // 1. Official BATHUARY_002 credential check
+  if (cleanUser.toUpperCase() === creds.username.toUpperCase() && cleanPass === creds.password) {
+    return res.json({
+      status: "success",
+      message: "Login successful",
+      user: {
+        name: "Bathuary Gram Panchayat Official",
+        userId: creds.username,
+        role: "ADMIN",
+        designation: "Authorized Panchayat Officer",
+        village: "HATBAINCHA",
+        sansad: "ALL"
+      },
+      token: "bathuary_official_jwt_" + Date.now()
+    });
+  }
+
+  // 2. Administrative master fallback
+  if (
+    (cleanUser === "9002736997" && (cleanPass === "Madan#&2580" || cleanPass === "Admin@12345")) ||
+    (cleanUser.toLowerCase() === "admin" && (cleanPass === "admin123" || cleanPass === "Admin@12345"))
+  ) {
+    return res.json({
+      status: "success",
+      message: "Admin login successful",
+      user: {
+        name: "Bathuary Gram Panchayat (VB-G RAM G)",
+        userId: "9002736997",
+        role: "ADMIN",
+        designation: "Administrator / Executive Assistant",
+        email: "bathuarygp@gmail.com",
+        status: "Active"
+      },
+      token: `bathuary_admin_jwt_${Date.now()}`
+    });
+  }
+
+  // 3. Cached users lookup
+  const user = usersCache.find(
+    u => (u.mobile === cleanUser || u.userId === cleanUser) && u.password === cleanPass
+  );
+  if (user) {
+    const { password: _, ...safeUser } = user;
+    return res.json({
+      status: "success",
+      token: `jwt_sim_${Date.now()}_${user.mobile}`,
+      user: safeUser
+    });
+  }
+
+  return res.status(401).json({
+    status: "error",
+    message: "ভুল ইউজারনেম বা পাসওয়ার্ড (Invalid Username or Password). Official User: BATHUARY_002"
+  });
+});
+
+app.post("/api/auth/change-password", (req: Request, res: Response) => {
+  const { username, currentPassword, newPassword } = req.body;
+  const creds = loadAuthCredentials();
+
+  const cleanCurrent = String(currentPassword || "").trim();
+  const cleanNew = String(newPassword || "").trim();
+
+  if (cleanCurrent !== creds.password) {
+    return res.status(400).json({
+      status: "error",
+      message: "বর্তমান পাসওয়ার্ড ভুল (Current password is incorrect)."
+    });
+  }
+
+  if (!cleanNew || cleanNew.length < 6) {
+    return res.status(400).json({
+      status: "error",
+      message: "নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে (Minimum 6 characters required)."
+    });
+  }
+
+  creds.password = cleanNew;
+  creds.updatedAt = new Date().toISOString();
+  saveAuthCredentials(creds);
+
+  return res.json({
+    status: "success",
+    message: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে (Password changed successfully)."
+  });
+});
+
+app.get("/api/auth/status", (req: Request, res: Response) => {
+  const creds = loadAuthCredentials();
+  res.json({
+    status: "success",
+    username: creds.username,
+    updatedAt: creds.updatedAt
+  });
+});
+
+// ----------------------------------------------------------------------------
+// RBI Bank Master Search & Auto-Fix API Endpoints
+// ----------------------------------------------------------------------------
+app.get("/api/rbi/search", (req: Request, res: Response) => {
+  const query = String(req.query.q || "");
+  const bank = req.query.bank ? String(req.query.bank) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 20;
+  const results = searchRbiBankMaster(query, bank, limit);
+  res.json({ status: "success", count: results.length, data: results });
+});
+
+app.post("/api/rbi/autofix", (req: Request, res: Response) => {
+  const { bank, ifsc, branch } = req.body;
+  const fixed = autoFixBankDetails(bank, ifsc, branch);
+  res.json({ status: "success", ...fixed });
 });
 
 // ----------------------------------------------------------------------------
@@ -642,15 +793,19 @@ app.get("/api/sync-google-sheet", (req: Request, res: Response) => {
 
 app.post("/api/sync-google-sheet", async (req: Request, res: Response) => {
   try {
-    const { sheetUrl } = req.body;
-    if (!sheetUrl || typeof sheetUrl !== "string") {
+    const cfg = loadSavedSheetConfig();
+    const providedUrl = req.body?.sheetUrl;
+    const trimmedUrl = (typeof providedUrl === "string" && providedUrl.trim().length > 0)
+      ? providedUrl.trim()
+      : (cfg.sheetUrl || PERMANENT_DEFAULT_SHEET_URL);
+
+    if (!trimmedUrl) {
       return res.status(400).json({ 
         status: "error", 
         message: "Please provide a valid Google Sheet URL or spreadsheet link." 
       });
     }
 
-    const trimmedUrl = sheetUrl.trim();
     const syncResult = await fetchAndParseGoogleSheet(trimmedUrl);
 
     beneficiariesCache = syncResult.beneficiaries;
@@ -1059,53 +1214,6 @@ app.get("/api/audit-logs", (req: Request, res: Response) => {
   });
 });
 
-// Users & Authentication
-app.post("/api/auth/login", (req: Request, res: Response) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ status: "error", message: "Mobile number and password required" });
-  }
-
-  const cleanUser = username.toString().trim();
-  const cleanPass = password.toString().trim();
-
-  // Master Admin direct check from user's provided code
-  if (
-    (cleanUser === "9002736997" && (cleanPass === "Madan#&2580" || cleanPass === "Admin@12345")) ||
-    (cleanUser.toLowerCase() === "admin" && (cleanPass === "admin123" || cleanPass === "Admin@12345"))
-  ) {
-    const adminUser: AppUser = {
-      mobile: "9002736997",
-      userId: "9002736997",
-      name: "Bathuary Gram Panchayat (VB-G RAM G)",
-      role: "ADMIN",
-      designation: "Administrator / Executive Assistant",
-      email: "bathuarygp@gmail.com",
-      status: "Active"
-    };
-    return res.json({
-      status: "success",
-      token: `jwt_sim_${Date.now()}_9002736997`,
-      user: adminUser
-    });
-  }
-
-  const user = usersCache.find(
-    u => (u.mobile === cleanUser || u.userId === cleanUser) && u.password === cleanPass
-  );
-
-  if (user) {
-    const { password: _, ...safeUser } = user;
-    return res.json({
-      status: "success",
-      token: `jwt_sim_${Date.now()}_${user.mobile}`,
-      user: safeUser
-    });
-  }
-
-  return res.status(401).json({ status: "error", message: "Invalid mobile number or password." });
-});
-
 // Users Management (Admin only)
 app.get("/api/users", (req: Request, res: Response) => {
   const safeUsers = usersCache.map(u => {
@@ -1309,11 +1417,11 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       return `Bathuary Gram Panchayat (Egra-II Development Block, Purba Medinipur) comprises **29 Canonical Villages** and **16 Sansads** (BATHUARY 1 to BATHUARY 16).\n\nOfficial 29 Villages:\n${BATHUARY_CANONICAL_VILLAGES.join(', ')}.`;
     }
 
-    if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়') || lower.includes('কোথায়') || lower.includes('where')) {
+    if (lower.includes('office') || lower.includes('অফিস') || lower.includes('contact') || lower.includes('যোগাযোগ') || lower.includes('সময়') || lower.includes('timing') || lower.includes('কোথায়') || lower.includes('where')) {
       if (isBengali) {
-        return `বাথুয়ারী গ্রাম পঞ্চায়েত অফিস সংক্রান্ত সরকারি তথ্য:\n• অফিস ঠিকানা: গ্রাম - হাটবাইঞ্চা / বাথুয়ারী, ডাকঘর - বাথুয়ারী, থানা - এগরা, ব্লক - এগরা-২ ডেভেলপমেন্ট ব্লক, জেলা - পূর্ব মেদিনীপুর, পিন কোড - ৭২১৪৪৮।\n• ইমেইল: bathuarygp@gmail.com\n• অফিস সময়: সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা (সরকারি ছুটির দিন ছাড়া)।\n• দায়িত্বপ্রাপ্ত প্রধান আধিকারিকগণ: পঞ্চায়েত প্রধান, সচিব (শ্রী সুপ্রভাত পড়ুয়া), এবং জিআরএস (শ্রী মানিক দাস)।`;
+        return `Bathuary Gram Panchayat Office Information:\n• Address: Vill+PO - Hatbaincha , P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721422.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan(Pramila Bar), Secretary (Suprabhat Parua), Nirman Sahayak (Prasun Mandal), GRS (Manik Das), VLE (Sk David)।`;
       }
-      return `Bathuary Gram Panchayat Office Information:\n• Address: Village - Hatbaincha / Bathuary, P.O. - Bathuary, P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721448.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan, Secretary (Suprabhat Parua), GRS (Manik Das), VLE (Sk David & Niranjan Pradhan).`;
+      return `Bathuary Gram Panchayat Office Information:\n• Address: Vill+PO - Hatbaincha , P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721422.\n• Email: bathuarygp@gmail.com\n• Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays).\n• Key Officials: Pradhan(Pramila Bar), Secretary (Suprabhat Parua), Nirman Sahayak (Prasun Mandal), GRS (Manik Das), VLE (Sk David).`;
     }
 
     if (lower.includes('abps') || lower.includes('এবিপিএস') || lower.includes('payment') || lower.includes('মজুরি') || lower.includes('wage') || lower.includes('টাকা')) {
@@ -1351,18 +1459,17 @@ OFFICIAL VERIFIED PANCHAYAT GROUND TRUTH:
 - District: পূর্ব মেদিনীপুর (Purba Medinipur), পশ্চিমবঙ্গ (West Bengal)
 - CRITICAL GEOGRAPHY RULE: Bathuary GP is in PURBA MEDINIPUR district, Egra-II Development Block. Never mention North 24 Parganas, Swarupnagar, Dhaltitha, or any unrelated area!
 - Post Office: বাথুয়ারী (Bathuary)
-- Office Location: হাটবাইঞ্চা / বাথুয়ারী গ্রাম, ডাকঘর: বাথুয়ারী, থানা: এগরা, জেলা: পূর্ব মেদিনীপুর, পিন: ৭২১৪৪৮ (Hatbaincha / Bathuary Village, P.O. Bathuary, P.S. Egra, Dist: Purba Medinipur, PIN 721448)
+- Office Location & Address: Vill+PO - Hatbaincha , P.S. - Egra, Block - Egra-II Development Block, District - Purba Medinipur, West Bengal - 721422.
 - Official Email: bathuarygp@gmail.com
 - Total Canonical Villages (২৯টি গ্রাম): ${BATHUARY_CANONICAL_VILLAGES.join(", ")}
 - Total Sansads (১৬টি সংসদ): BATHUARY 1 থেকে BATHUARY 16
 - Official Key Staff & Officers:
-  * পঞ্চায়েত প্রধান ও উপপ্রধান (Pradhan & Upa-Pradhan)
-  * শ্রী সুপ্রভাত পড়ুয়া (SUPRABHAT PARUA) - সচিব / নির্বাহি সহায়ক (Secretary / Executive Assistant)
-  * মানিক দাস (MANIK DAS) - গ্রাম রোজগার সেবক (GRS)
-  * শেখ দাঊদ (SK DAVID) - ভিলেজ লেভেল এন্টারপ্রেনার / ডেটা এন্ট্রি অপারেটর (VLE / DEO)
-  * নিরঞ্জন প্রধান (NIRANJAN PRADHAN) - ভিএলই / কম্পিউটার অপারেটর (VLE)
-  * রাজীব বেরা (RAJIB BERA) - টেকনিক্যাল অ্যাসিস্ট্যান্ট (TA)
-- Office Working Hours: সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা (সরকারি ছুটির দিন ব্যতীত)
+  * Pradhan: Pramila Bar (প্রধান: প্রমিলা বার)
+  * Secretary: Suprabhat Parua (সচিব: সুপ্রভাত পড়ুয়া)
+  * Nirman Sahayak: Prasun Mandal (নির্মাণ সহায়ক: প্রসুন মণ্ডল)
+  * GRS: Manik Das (গ্রাম রোজগার সেবক: মানিক দাস)
+  * VLE: Sk David (ভিলেজ লেভেল এন্টারপ্রেনার: সেখ দাউদ / ডেভিড)
+- Office Working Hours: Monday to Friday, 10:30 AM to 5:00 PM (except Govt Holidays) [সোমবার থেকে শুক্রবার সকাল ১০:৩০ টা থেকে বিকাল ৫:০০ টা, সরকারি ছুটির দিন ছাড়া]
 - Real-time Portal Database Statistics:
   * Total Job Card Beneficiaries: ${totalCount} জন
   * e-KYC Completed (Done): ${doneCount} জন (${pctDone}%)

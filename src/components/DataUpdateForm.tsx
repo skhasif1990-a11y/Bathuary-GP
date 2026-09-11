@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   FileEdit, 
   Save, 
@@ -108,48 +108,89 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
   const filteredJobCards = useMemo(() => {
     const q = jobCardSearch.trim().toLowerCase();
     if (!q) return [];
+    const qDigits = q.replace(/\D/g, '');
     return beneficiaries
-      .filter(b => 
-        (b.colH && String(b.colH).toLowerCase().includes(q)) || 
-        (b.colJ && String(b.colJ).toLowerCase().includes(q)) || 
-        (b.colB && String(b.colB).toLowerCase().includes(q))
-      )
-      .slice(0, 25);
+      .filter(b => {
+        if (b.colH && String(b.colH).toLowerCase().includes(q)) return true;
+        if (b.colJ && String(b.colJ).toLowerCase().includes(q)) return true;
+        if (b.colB && String(b.colB).toLowerCase().includes(q)) return true;
+        if (qDigits.length >= 4 && b.colP && b.colP.replace(/\D/g, '').includes(qDigits)) return true;
+        return false;
+      })
+      .slice(0, 30);
   }, [beneficiaries, jobCardSearch]);
 
   // Live filtered suggestions for Aadhaar & Mobile Number Search
   const filteredAadhaarRecords = useMemo(() => {
     const raw = aadhaarSearch.trim();
     if (!raw) return [];
+    
     const digitsOnly = raw.replace(/\D/g, '');
     const lower = raw.toLowerCase();
 
-    return beneficiaries
-      .filter(b => {
-        // Match 12-digit or partial Aadhaar
-        const aadhaarDigits = (b.colP || '').replace(/\D/g, '');
-        if (digitsOnly && (aadhaarDigits.includes(digitsOnly) || digitsOnly.includes(aadhaarDigits))) return true;
+    // Collect matching items with priority scoring
+    const scored: Array<{ record: BeneficiaryRow; score: number }> = [];
 
-        // Match 10-digit or partial Mobile Phone
-        const phoneDigits = (b.colQ || '').replace(/\D/g, '');
-        if (digitsOnly && (phoneDigits.includes(digitsOnly) || digitsOnly.includes(phoneDigits))) return true;
+    for (let i = 0; i < beneficiaries.length; i++) {
+      const b = beneficiaries[i];
+      let score = 0;
+      const aadhaarClean = (b.colP || '').replace(/\D/g, '');
+      const phoneClean = (b.colQ || '').replace(/\D/g, '');
+      const name = (b.colJ || '').toLowerCase();
+      const jc = (b.colH || '').toLowerCase();
+      const village = (b.colV || '').toLowerCase();
+      const sansad = (b.colB || '').toLowerCase();
 
-        // Match raw strings in case of dashes, spaces or masks
-        if (b.colP && b.colP.toLowerCase().includes(lower)) return true;
-        if (b.colQ && b.colQ.toLowerCase().includes(lower)) return true;
+      // 1. Aadhaar matching (Top priority)
+      if (digitsOnly.length > 0 && aadhaarClean.length > 0) {
+        if (aadhaarClean === digitsOnly) {
+          score = 100; // Exact 12-digit Aadhaar match
+        } else if (aadhaarClean.startsWith(digitsOnly)) {
+          score = 85;  // Starts with typed Aadhaar digits
+        } else if (aadhaarClean.endsWith(digitsOnly)) {
+          score = 75;  // Ends with typed digits (e.g. searching last 4 digits)
+        } else if (aadhaarClean.includes(digitsOnly)) {
+          score = 65;  // Substring match
+        }
+      }
 
-        // Match Applicant Name
-        if (b.colJ && b.colJ.toLowerCase().includes(lower)) return true;
+      // 2. Mobile Phone matching
+      if (digitsOnly.length > 0 && phoneClean.length > 0) {
+        if (phoneClean === digitsOnly) {
+          score = Math.max(score, 70); // Exact phone
+        } else if (phoneClean.startsWith(digitsOnly)) {
+          score = Math.max(score, 55);
+        } else if (phoneClean.endsWith(digitsOnly)) {
+          score = Math.max(score, 50);
+        } else if (phoneClean.includes(digitsOnly)) {
+          score = Math.max(score, 45);
+        }
+      }
 
-        // Match Job Card
-        if (b.colH && b.colH.toLowerCase().includes(lower)) return true;
+      // 3. Name or Job Card or Village text matching (if query contains letters)
+      if (lower.length > 0) {
+        if (name === lower) {
+          score = Math.max(score, 60);
+        } else if (name.startsWith(lower)) {
+          score = Math.max(score, 45);
+        } else if (name.includes(lower)) {
+          score = Math.max(score, 35);
+        } else if (jc.includes(lower)) {
+          score = Math.max(score, 30);
+        } else if (village.includes(lower) || sansad.includes(lower)) {
+          score = Math.max(score, 20);
+        }
+      }
 
-        // Match Village Name
-        if (b.colV && b.colV.toLowerCase().includes(lower)) return true;
+      if (score > 0) {
+        scored.push({ record: b, score });
+      }
+    }
 
-        return false;
-      })
-      .slice(0, 50);
+    // Sort descending by score, then by row index
+    scored.sort((a, b) => b.score - a.score || a.record.rowIndex - b.record.rowIndex);
+
+    return scored.slice(0, 50).map(s => s.record);
   }, [beneficiaries, aadhaarSearch]);
 
   // Standard RBI 4-letter IFSC Bank Map for instant auto-resolution (includes merged entities)
@@ -231,86 +272,92 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
     });
   }, [bankMaster, formData.colAO]);
 
+  // Populate Form Fields and Normalize Banking from a Selected Beneficiary Record
+  const populateRecordToForm = useCallback((match: BeneficiaryRow) => {
+    setActiveRow(match);
+    setSelectedJobCard(match.colH);
+    setJobCardSearch(match.colH);
+    setSelectedApplicant(match.colJ);
+    setSelectedAadhaar(match.colP || '');
+    setAadhaarSearch(match.colP || match.colQ || match.colH || '');
+    setIsAadhaarOpen(false);
+
+    // Normalize Bank details (fix branch vs IFSC if inverted)
+    let resolvedIfsc = (match.colAP || '').trim().toUpperCase();
+    let resolvedBranch = (match.colAQ || '').trim().toUpperCase();
+    let resolvedBank = (match.colAO || '').trim().toUpperCase();
+
+    const isBranchAnIfsc = /^[A-Z]{4}0[A-Z0-9]{6}$/.test(resolvedBranch) || bankMaster.some(b => b.ifsc.toUpperCase() === resolvedBranch);
+    const isIfscABranch = resolvedIfsc.includes('BRANCH') || resolvedIfsc.includes('MAIN') || resolvedIfsc.includes('BAZAR') || resolvedIfsc.includes('RURAL') || resolvedIfsc.includes('MIDNAPORE');
+
+    if (isBranchAnIfsc || isIfscABranch) {
+      const temp = resolvedIfsc;
+      resolvedIfsc = resolvedBranch;
+      resolvedBranch = temp;
+    }
+
+    // Auto-upgrade legacy merged IFSC (e.g. ALLA0212824 -> IDIB000E503, UTBI0EGR276 -> PUNB0019020)
+    if (LEGACY_IFSC_UPGRADE_MAP[resolvedIfsc]) {
+      const up = LEGACY_IFSC_UPGRADE_MAP[resolvedIfsc];
+      resolvedIfsc = up.newIfsc;
+      resolvedBank = up.newBank;
+      if (!resolvedBranch || resolvedBranch === '—') resolvedBranch = up.branch;
+      setMergerNotice(`Legacy IFSC recognized (${up.reason}): Auto-updated to ${up.newBank} (IFSC: ${up.newIfsc}, Branch: ${up.branch})`);
+    } else {
+      setMergerNotice('');
+    }
+
+    // Canonicalize Bank name (e.g. IPPB / INDIAN POST -> INDIA POST PAYMENTS BANK, SBI -> STATE BANK OF INDIA)
+    if (resolvedBank) {
+      resolvedBank = canonicalizeBankName(resolvedBank);
+    }
+
+    // Auto-fill from bankMaster if IFSC is recognized
+    const matchedBank = bankMaster.find(b => b.ifsc.toUpperCase() === resolvedIfsc);
+    if (matchedBank) {
+      if (!resolvedBank || resolvedBank === '—') resolvedBank = matchedBank.bank;
+      if (!resolvedBranch || resolvedBranch === '—') {
+        resolvedBranch = matchedBank.branch;
+      }
+    }
+
+    // If IPPB and branch is missing, set default Bathuary/Egra branch
+    if (resolvedBank === 'INDIA POST PAYMENTS BANK' && (!resolvedBranch || resolvedBranch === '—' || resolvedBranch.includes('PROCESSING'))) {
+      resolvedBranch = 'BATHUARY BO';
+    }
+
+    const formattedKyc = formatKycDate(match.colS);
+
+    setFormData({
+      colP: match.colP || '',
+      colQ: match.colQ || '',
+      colR: match.colR || '',
+      colS: formattedKyc || '',
+      colT: match.colT || '',
+      colU: match.colU || (currentUser ? `${currentUser.name}, ${currentUser.role}` : ''),
+      colV: match.colV || '',
+      colW: match.colW || '',
+      colX: match.colX || '',
+      colY: match.colY || '',
+      colAO: resolvedBank,
+      colAP: resolvedIfsc,
+      colAQ: resolvedBranch,
+      colAR: match.colAR || '',
+      colAR_confirm: match.colAR || ''
+    });
+  }, [bankMaster, currentUser]);
+
   // Sync selected record when Applicant changes
   useEffect(() => {
     if (selectedJobCard && selectedApplicant) {
       const match = beneficiaries.find(b => b.colH === selectedJobCard && b.colJ === selectedApplicant);
       if (match) {
-        setActiveRow(match);
-
-        // Normalize Bank details (fix branch vs IFSC if inverted)
-        let resolvedIfsc = (match.colAP || '').trim().toUpperCase();
-        let resolvedBranch = (match.colAQ || '').trim().toUpperCase();
-        let resolvedBank = (match.colAO || '').trim().toUpperCase();
-
-        const isBranchAnIfsc = /^[A-Z]{4}0[A-Z0-9]{6}$/.test(resolvedBranch) || bankMaster.some(b => b.ifsc.toUpperCase() === resolvedBranch);
-        const isIfscABranch = resolvedIfsc.includes('BRANCH') || resolvedIfsc.includes('MAIN') || resolvedIfsc.includes('BAZAR') || resolvedIfsc.includes('RURAL') || resolvedIfsc.includes('MIDNAPORE');
-
-        if (isBranchAnIfsc || isIfscABranch) {
-          const temp = resolvedIfsc;
-          resolvedIfsc = resolvedBranch;
-          resolvedBranch = temp;
-        }
-
-        // Auto-upgrade legacy merged IFSC (e.g. ALLA0212824 -> IDIB000E503, UTBI0EGR276 -> PUNB0019020)
-        if (LEGACY_IFSC_UPGRADE_MAP[resolvedIfsc]) {
-          const up = LEGACY_IFSC_UPGRADE_MAP[resolvedIfsc];
-          resolvedIfsc = up.newIfsc;
-          resolvedBank = up.newBank;
-          if (!resolvedBranch || resolvedBranch === '—') resolvedBranch = up.branch;
-          setMergerNotice(`Legacy IFSC recognized (${up.reason}): Auto-updated to ${up.newBank} (IFSC: ${up.newIfsc}, Branch: ${up.branch})`);
-        } else {
-          setMergerNotice('');
-        }
-
-        // Canonicalize Bank name (e.g. IPPB / INDIAN POST -> INDIA POST PAYMENTS BANK, SBI -> STATE BANK OF INDIA)
-        if (resolvedBank) {
-          resolvedBank = canonicalizeBankName(resolvedBank);
-        }
-
-        // Auto-fill from bankMaster if IFSC is recognized
-        const matchedBank = bankMaster.find(b => b.ifsc.toUpperCase() === resolvedIfsc);
-        if (matchedBank) {
-          if (!resolvedBank || resolvedBank === '—') resolvedBank = matchedBank.bank;
-          if (!resolvedBranch || resolvedBranch === '—') {
-            resolvedBranch = matchedBank.branch;
-          }
-        }
-
-        // If IPPB and branch is missing, set default Bathuary/Egra branch
-        if (resolvedBank === 'INDIA POST PAYMENTS BANK' && (!resolvedBranch || resolvedBranch === '—' || resolvedBranch.includes('PROCESSING'))) {
-          resolvedBranch = 'BATHUARY BO';
-        }
-
-        const formattedKyc = formatKycDate(match.colS);
-
-        setFormData({
-          colP: match.colP || '',
-          colQ: match.colQ || '',
-          colR: match.colR || '',
-          colS: formattedKyc || '',
-          colT: match.colT || '',
-          colU: match.colU || (currentUser ? `${currentUser.name}, ${currentUser.role}` : ''),
-          colV: match.colV || '',
-          colW: match.colW || '',
-          colX: match.colX || '',
-          colY: match.colY || '',
-          colAO: resolvedBank,
-          colAP: resolvedIfsc,
-          colAQ: resolvedBranch,
-          colAR: match.colAR || '',
-          colAR_confirm: match.colAR || ''
-        });
-        setSelectedAadhaar(match.colP || '');
-        if (!isAadhaarOpen) {
-          setAadhaarSearch(match.colP || match.colQ || match.colH || '');
-        }
-        setJobCardSearch(match.colH || '');
+        populateRecordToForm(match);
       }
-    } else {
+    } else if (!activeRow) {
       setActiveRow(null);
     }
-  }, [selectedJobCard, selectedApplicant, beneficiaries, currentUser, bankMaster, isAadhaarOpen]);
+  }, [selectedJobCard, selectedApplicant, beneficiaries, populateRecordToForm, activeRow]);
 
   // Selection handlers
   const handleSelectJobCardMatch = (cardNo: string, applicantName?: string) => {
@@ -328,27 +375,29 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
   };
 
   const handleSelectAadhaarMatch = (b: BeneficiaryRow) => {
-    setSelectedAadhaar(b.colP || '');
-    setAadhaarSearch(b.colP || b.colQ || b.colH);
-    setIsAadhaarOpen(false);
-    setSelectedJobCard(b.colH);
-    setJobCardSearch(b.colH);
-    setSelectedApplicant(b.colJ);
-    setActiveRow(b);
+    populateRecordToForm(b);
   };
 
   const handleAadhaarInputChange = (val: string) => {
     setAadhaarSearch(val);
     setIsAadhaarOpen(true);
-    const clean = val.replace(/\D/g, '');
-    setSelectedAadhaar(clean);
+    const cleanDigits = val.replace(/\D/g, '');
+    setSelectedAadhaar(cleanDigits);
+
+    // Auto-populate immediately if user types or pastes all 12 digits of an existing Aadhaar
+    if (cleanDigits.length === 12) {
+      const exactMatch = beneficiaries.find(b => (b.colP || '').replace(/\D/g, '') === cleanDigits);
+      if (exactMatch) {
+        populateRecordToForm(exactMatch);
+      }
+    }
   };
 
   const handleAadhaarKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (filteredAadhaarRecords.length > 0) {
-        handleSelectAadhaarMatch(filteredAadhaarRecords[0]);
+        populateRecordToForm(filteredAadhaarRecords[0]);
       }
     } else if (e.key === 'Escape') {
       setIsAadhaarOpen(false);
@@ -744,7 +793,7 @@ export const DataUpdateForm: React.FC<DataUpdateFormProps> = ({
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                             <span className="font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
-                              🆔 {item.colP ? item.colP : 'No Aadhaar'}
+                              🆔 {item.colP ? (item.colP.length === 12 ? `${item.colP.slice(0, 4)} ${item.colP.slice(4, 8)} ${item.colP.slice(8, 12)}` : item.colP) : 'No Aadhaar'}
                             </span>
                             <span className="font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
                               📱 {item.colQ ? item.colQ : 'No Mobile'}
